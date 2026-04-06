@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { QRCodeSVG } from 'qrcode.react';
-import { User, Save } from 'lucide-react';
+import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
+import { User, Save, Download, Printer } from 'lucide-react';
+import { useRef, useCallback } from 'react';
 
 export default function ProfileSettings() {
   const { user, profile, refreshProfile } = useAuth();
