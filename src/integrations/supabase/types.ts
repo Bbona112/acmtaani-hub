@@ -176,6 +176,51 @@ export type Database = {
         }
         Relationships: []
       }
+      visitors: {
+        Row: {
+          badge_number: string | null
+          check_in: string
+          check_out: string | null
+          checked_in_by: string | null
+          company: string | null
+          created_at: string
+          host_employee_id: string | null
+          host_name: string | null
+          id: string
+          notes: string | null
+          purpose: string | null
+          visitor_name: string
+        }
+        Insert: {
+          badge_number?: string | null
+          check_in?: string
+          check_out?: string | null
+          checked_in_by?: string | null
+          company?: string | null
+          created_at?: string
+          host_employee_id?: string | null
+          host_name?: string | null
+          id?: string
+          notes?: string | null
+          purpose?: string | null
+          visitor_name: string
+        }
+        Update: {
+          badge_number?: string | null
+          check_in?: string
+          check_out?: string | null
+          checked_in_by?: string | null
+          company?: string | null
+          created_at?: string
+          host_employee_id?: string | null
+          host_name?: string | null
+          id?: string
+          notes?: string | null
+          purpose?: string | null
+          visitor_name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
