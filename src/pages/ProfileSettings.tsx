@@ -219,17 +219,31 @@ export default function ProfileSettings() {
           </CardHeader>
           <CardContent className="flex flex-col items-center gap-3">
             {user && (
-              <div className="bg-white p-4 rounded-lg">
-                <QRCodeSVG
-                  value={`EMS:${user.id}`}
-                  size={160}
-                  level="M"
-                />
-              </div>
+              <>
+                <div className="bg-white p-4 rounded-lg">
+                  <QRCodeSVG
+                    value={`EMS:${user.id}`}
+                    size={160}
+                    level="M"
+                  />
+                </div>
+                {/* Hidden canvas version for download/print */}
+                <div ref={qrCanvasRef} className="hidden">
+                  <QRCodeCanvas value={`EMS:${user.id}`} size={300} level="M" />
+                </div>
+              </>
             )}
             <p className="text-xs text-muted-foreground text-center max-w-[180px]">
               This QR code is unique to your account
             </p>
+            <div className="flex gap-2 w-full">
+              <Button variant="outline" size="sm" className="flex-1" onClick={downloadBadge}>
+                <Download className="h-3.5 w-3.5 mr-1" /> Download
+              </Button>
+              <Button variant="outline" size="sm" className="flex-1" onClick={printBadge}>
+                <Printer className="h-3.5 w-3.5 mr-1" /> Print
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
