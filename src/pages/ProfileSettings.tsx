@@ -14,12 +14,117 @@ export default function ProfileSettings() {
   const { user, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+  const badgeRef = useRef<HTMLDivElement>(null);
+  const qrCanvasRef = useRef<HTMLDivElement>(null);
   const [form, setForm] = useState({
     full_name: '',
     department: '',
     position: '',
     phone: '',
   });
+
+  const downloadBadge = useCallback(() => {
+    // Draw a printable badge card onto a canvas and download as PNG
+    const canvas = document.createElement('canvas');
+    const w = 600, h = 400;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d')!;
+
+    // Background
+    ctx.fillStyle = '#ffffff';
+    ctx.roundRect(0, 0, w, h, 16);
+    ctx.fill();
+
+    // Top accent bar
+    ctx.fillStyle = '#1a1a2e';
+    ctx.roundRect(0, 0, w, 80, [16, 16, 0, 0]);
+    ctx.fill();
+
+    // Company name
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 22px system-ui, sans-serif';
+    ctx.fillText('EMS — Employee Badge', 24, 50);
+
+    // Employee name
+    ctx.fillStyle = '#111111';
+    ctx.font = 'bold 26px system-ui, sans-serif';
+    ctx.fillText(profile?.full_name || 'Employee', 24, 130);
+
+    // Position & department
+    ctx.fillStyle = '#666666';
+    ctx.font = '16px system-ui, sans-serif';
+    ctx.fillText(profile?.position || '', 24, 160);
+    ctx.fillText(profile?.department || '', 24, 185);
+
+    // Email
+    ctx.fillStyle = '#888888';
+    ctx.font = '14px system-ui, sans-serif';
+    ctx.fillText(profile?.email || '', 24, 220);
+
+    // "Scan to clock in/out" label
+    ctx.fillStyle = '#999999';
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.fillText('Scan QR to clock in/out', w - 200, h - 30);
+
+    // QR code — grab from hidden canvas
+    const qrCanvas = qrCanvasRef.current?.querySelector('canvas');
+    if (qrCanvas) {
+      const qrSize = 180;
+      ctx.drawImage(qrCanvas, w - qrSize - 30, 100, qrSize, qrSize);
+    }
+
+    // Border
+    ctx.strokeStyle = '#e0e0e0';
+    ctx.lineWidth = 2;
+    ctx.roundRect(1, 1, w - 2, h - 2, 16);
+    ctx.stroke();
+
+    const link = document.createElement('a');
+    link.download = `badge-${(profile?.full_name || 'employee').replace(/\s+/g, '-').toLowerCase()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }, [profile]);
+
+  const printBadge = useCallback(() => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const qrCanvas = qrCanvasRef.current?.querySelector('canvas');
+    const qrDataUrl = qrCanvas?.toDataURL('image/png') || '';
+
+    printWindow.document.write(`
+      <html><head><title>Employee Badge</title>
+      <style>
+        @page { size: 3.375in 2.125in; margin: 0; }
+        body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: system-ui, sans-serif; }
+        .badge { width: 3.375in; height: 2.125in; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; box-sizing: border-box; }
+        .header { background: #1a1a2e; color: white; padding: 8px 12px; font-size: 10px; font-weight: bold; }
+        .body { display: flex; padding: 10px 12px; gap: 10px; }
+        .info { flex: 1; }
+        .name { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+        .detail { font-size: 9px; color: #666; margin-bottom: 2px; }
+        .qr img { width: 90px; height: 90px; }
+        .footer { text-align: right; padding: 0 12px 6px; font-size: 7px; color: #999; }
+      </style></head><body>
+      <div class="badge">
+        <div class="header">EMS — Employee Badge</div>
+        <div class="body">
+          <div class="info">
+            <div class="name">${profile?.full_name || ''}</div>
+            <div class="detail">${profile?.position || ''}</div>
+            <div class="detail">${profile?.department || ''}</div>
+            <div class="detail" style="margin-top:6px">${profile?.email || ''}</div>
+          </div>
+          <div class="qr"><img src="${qrDataUrl}" /></div>
+        </div>
+        <div class="footer">Scan QR to clock in/out</div>
+      </div>
+      </body></html>
+    `);
+    printWindow.document.close();
+    printWindow.onload = () => { printWindow.print(); };
+  }, [profile]);
 
   useEffect(() => {
     if (profile) {
