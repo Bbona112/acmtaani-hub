@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Clock, ListTodo, CalendarOff, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, Clock, ListTodo, CalendarOff, LogOut, Settings, DoorOpen, Monitor } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
