@@ -23,6 +23,9 @@ const navItems = [
   { title: 'Attendance', url: '/attendance', icon: Clock },
   { title: 'Directory', url: '/directory', icon: Users },
   { title: 'Leave Requests', url: '/leave', icon: CalendarOff },
+  { title: 'Front Desk', url: '/frontdesk', icon: DoorOpen },
+  { title: 'Kiosk Mode', url: '/kiosk', icon: Monitor },
+  { title: 'Profile', url: '/profile', icon: Settings },
 ];
 
 export function AppSidebar() {
