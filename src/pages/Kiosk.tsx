@@ -34,7 +34,6 @@ export default function Kiosk() {
     const userId = decodedText.replace('EMS:', '');
 
     try {
-      // Get employee name
       const { data: profile } = await supabase
         .from('profiles')
         .select('full_name')
@@ -42,12 +41,11 @@ export default function Kiosk() {
         .maybeSingle();
 
       if (!profile) {
-        setLastResult({ type: 'error', name: '', message: 'Employee not found', time: format(new Date(), 'h:mm:ss a') });
+        setLastResult({ type: 'error', name: '', message: 'Member not found', time: format(new Date(), 'h:mm:ss a') });
         setTimeout(() => { processingRef.current = false; }, 3000);
         return;
       }
 
-      // Check for active session
       const { data: activeSession } = await supabase
         .from('attendance')
         .select('*')
@@ -58,7 +56,6 @@ export default function Kiosk() {
         .maybeSingle();
 
       if (activeSession) {
-        // Clock out
         const now = new Date();
         const clockInTime = new Date(activeSession.clock_in);
         const hours = ((now.getTime() - clockInTime.getTime()) / 3600000).toFixed(2);
@@ -74,7 +71,6 @@ export default function Kiosk() {
           time: format(now, 'h:mm:ss a'),
         });
       } else {
-        // Clock in
         await supabase.from('attendance').insert({ user_id: userId });
         setLastResult({
           type: 'clock_in',
@@ -126,30 +122,22 @@ export default function Kiosk() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 relative">
-      {/* Header */}
       <div className="absolute top-6 left-6 flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
           <Building2 className="h-5 w-5 text-primary-foreground" />
         </div>
-        <span className="text-xl font-bold">EMS Kiosk</span>
+        <span className="text-xl font-bold">ACMtaani Kiosk</span>
       </div>
 
-      <Button
-        variant="ghost"
-        size="icon"
-        className="absolute top-6 right-6"
-        onClick={goFullscreen}
-      >
+      <Button variant="ghost" size="icon" className="absolute top-6 right-6" onClick={goFullscreen}>
         <Maximize className="h-5 w-5" />
       </Button>
 
-      {/* Clock */}
       <div className="text-center mb-8">
         <p className="text-6xl font-bold tracking-tight">{format(currentTime, 'h:mm:ss a')}</p>
         <p className="text-xl text-muted-foreground mt-2">{format(currentTime, 'EEEE, MMMM d, yyyy')}</p>
       </div>
 
-      {/* Scanner area */}
       <Card className="w-full max-w-md border-border/50">
         <CardContent className="pt-6 space-y-4">
           <div className="flex items-center justify-center gap-2 text-muted-foreground">
@@ -157,10 +145,7 @@ export default function Kiosk() {
             <span className="font-medium">Scan Your Badge</span>
           </div>
 
-          <div
-            id="qr-reader"
-            className="w-full aspect-square max-h-[300px] rounded-lg overflow-hidden bg-muted"
-          />
+          <div id="qr-reader" className="w-full aspect-square max-h-[300px] rounded-lg overflow-hidden bg-muted" />
 
           {!scanning ? (
             <Button onClick={startScanning} className="w-full" size="lg">
@@ -174,7 +159,6 @@ export default function Kiosk() {
         </CardContent>
       </Card>
 
-      {/* Result toast */}
       {lastResult && (
         <Card className={`w-full max-w-md mt-6 border-2 ${
           lastResult.type === 'clock_in' ? 'border-[hsl(var(--success))]/50 bg-[hsl(var(--success))]/5' :

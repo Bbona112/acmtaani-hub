@@ -5,13 +5,13 @@ export async function getCurrentUser() {
   return user;
 }
 
-export async function getUserRole(userId: string): Promise<'admin' | 'employee'> {
+export async function getUserRole(userId: string): Promise<'admin' | 'employee' | 'volunteer'> {
   const { data } = await supabase
     .from('user_roles')
     .select('role')
     .eq('user_id', userId)
     .maybeSingle();
-  return (data?.role as 'admin' | 'employee') || 'employee';
+  return (data?.role as 'admin' | 'employee' | 'volunteer') || 'employee';
 }
 
 export async function getProfile(userId: string) {
