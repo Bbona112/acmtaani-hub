@@ -15,41 +15,43 @@ interface ChatMessage {
   content: string;
   channel: string;
   created_at: string;
-  profiles?: { full_name: string } | null;
 }
 
 export default function Chat() {
   const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const loadProfiles = async () => {
+    const { data } = await supabase.from('profiles').select('user_id, full_name');
+    if (data) {
+      const map: Record<string, string> = {};
+      data.forEach(p => { map[p.user_id] = p.full_name; });
+      setProfiles(map);
+    }
+  };
+
   const loadMessages = async () => {
     const { data } = await supabase
       .from('chat_messages')
-      .select('*, profiles!chat_messages_sender_id_fkey(full_name)')
+      .select('*')
       .eq('channel', 'general')
       .order('created_at', { ascending: true })
       .limit(200);
-    if (data) setMessages(data as ChatMessage[]);
+    if (data) setMessages(data);
   };
 
   useEffect(() => {
+    loadProfiles();
     loadMessages();
 
     const channel = supabase
       .channel('chat-realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, async (payload) => {
-        // Fetch the new message with profile info
-        const { data } = await supabase
-          .from('chat_messages')
-          .select('*, profiles!chat_messages_sender_id_fkey(full_name)')
-          .eq('id', payload.new.id)
-          .single();
-        if (data) {
-          setMessages(prev => [...prev, data as ChatMessage]);
-        }
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
+        setMessages(prev => [...prev, payload.new as ChatMessage]);
       })
       .subscribe();
 
