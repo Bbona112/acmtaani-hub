@@ -41,6 +41,146 @@ export type Database = {
         }
         Relationships: []
       }
+      calendar_events: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          end_time: string
+          id: string
+          location: string | null
+          start_time: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          end_time: string
+          id?: string
+          location?: string | null
+          start_time: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          end_time?: string
+          id?: string
+          location?: string | null
+          start_time?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      chat_messages: {
+        Row: {
+          channel: string
+          content: string
+          created_at: string
+          id: string
+          sender_id: string
+        }
+        Insert: {
+          channel?: string
+          content: string
+          created_at?: string
+          id?: string
+          sender_id: string
+        }
+        Update: {
+          channel?: string
+          content?: string
+          created_at?: string
+          id?: string
+          sender_id?: string
+        }
+        Relationships: []
+      }
+      inventory: {
+        Row: {
+          available_quantity: number
+          category: string | null
+          created_at: string
+          description: string | null
+          id: string
+          location: string | null
+          name: string
+          quantity: number
+          requires_checkout: boolean
+          updated_at: string
+        }
+        Insert: {
+          available_quantity?: number
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          location?: string | null
+          name: string
+          quantity?: number
+          requires_checkout?: boolean
+          updated_at?: string
+        }
+        Update: {
+          available_quantity?: number
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          location?: string | null
+          name?: string
+          quantity?: number
+          requires_checkout?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      inventory_checkouts: {
+        Row: {
+          checked_out_at: string
+          created_at: string
+          id: string
+          inventory_item_id: string
+          notes: string | null
+          quantity: number
+          returned_at: string | null
+          user_id: string
+        }
+        Insert: {
+          checked_out_at?: string
+          created_at?: string
+          id?: string
+          inventory_item_id: string
+          notes?: string | null
+          quantity?: number
+          returned_at?: string | null
+          user_id: string
+        }
+        Update: {
+          checked_out_at?: string
+          created_at?: string
+          id?: string
+          inventory_item_id?: string
+          notes?: string | null
+          quantity?: number
+          returned_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_checkouts_inventory_item_id_fkey"
+            columns: ["inventory_item_id"]
+            isOneToOne: false
+            referencedRelation: "inventory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leave_requests: {
         Row: {
           created_at: string
@@ -235,7 +375,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "employee"
+      app_role: "admin" | "employee" | "volunteer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -363,7 +503,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "employee"],
+      app_role: ["admin", "employee", "volunteer"],
     },
   },
 } as const
