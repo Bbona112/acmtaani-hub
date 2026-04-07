@@ -6,7 +6,7 @@ import { getUserRole, getProfile } from '@/lib/supabase-helpers';
 interface AuthContextType {
   user: User | null;
   session: Session | null;
-  role: 'admin' | 'employee' | null;
+  role: 'admin' | 'employee' | 'volunteer' | null;
   profile: any;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -26,7 +26,7 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [role, setRole] = useState<'admin' | 'employee' | null>(null);
+  const [role, setRole] = useState<'admin' | 'employee' | 'volunteer' | null>(null);
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 

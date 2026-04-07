@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, GripVertical } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 const COLUMNS = [
   { id: 'todo', label: 'To Do', color: 'bg-muted' },
@@ -41,6 +41,14 @@ export default function Tasks() {
   useEffect(() => {
     loadTasks();
     if (role === 'admin') loadProfiles();
+
+    // Real-time subscription
+    const channel = supabase
+      .channel('tasks-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => loadTasks())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user, role]);
 
   const createTask = async () => {
@@ -57,14 +65,12 @@ export default function Tasks() {
       toast({ title: 'Task created' });
       setDialogOpen(false);
       setNewTask({ title: '', description: '', assigned_to: '', due_date: '' });
-      loadTasks();
     }
   };
 
   const updateStatus = async (taskId: string, status: string) => {
     const { error } = await supabase.from('tasks').update({ status }).eq('id', taskId);
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else loadTasks();
   };
 
   return (
@@ -72,7 +78,7 @@ export default function Tasks() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Tasks</h1>
-          <p className="text-muted-foreground mt-1">Manage and track tasks</p>
+          <p className="text-muted-foreground mt-1">Manage and track tasks (real-time)</p>
         </div>
         {role === 'admin' && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

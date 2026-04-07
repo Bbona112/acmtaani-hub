@@ -1,6 +1,5 @@
-import { LayoutDashboard, Users, Clock, ListTodo, CalendarOff, LogOut, Settings, DoorOpen, Monitor } from 'lucide-react';
+import { LayoutDashboard, Users, Clock, ListTodo, LogOut, Settings, Monitor, Package, MessageCircle, CalendarDays } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
-import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import {
   Sidebar,
@@ -22,8 +21,9 @@ const navItems = [
   { title: 'My Tasks', url: '/tasks', icon: ListTodo },
   { title: 'Attendance', url: '/attendance', icon: Clock },
   { title: 'Directory', url: '/directory', icon: Users },
-  { title: 'Leave Requests', url: '/leave', icon: CalendarOff },
-  { title: 'Front Desk', url: '/frontdesk', icon: DoorOpen },
+  { title: 'Inventory', url: '/inventory', icon: Package },
+  { title: 'Chat', url: '/chat', icon: MessageCircle },
+  { title: 'Calendar', url: '/calendar', icon: CalendarDays },
   { title: 'Kiosk Mode', url: '/kiosk', icon: Monitor },
   { title: 'Profile', url: '/profile', icon: Settings },
 ];
@@ -31,7 +31,6 @@ const navItems = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
-  const location = useLocation();
   const { profile, role, signOut } = useAuth();
 
   const initials = profile?.full_name
@@ -46,9 +45,9 @@ export function AppSidebar() {
             {!collapsed && (
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-                  <span className="text-primary-foreground text-xs font-bold">E</span>
+                  <span className="text-primary-foreground text-xs font-bold">A</span>
                 </div>
-                <span className="font-semibold text-foreground text-sm">EMS</span>
+                <span className="font-semibold text-foreground text-sm">ACMtaani Hub</span>
               </div>
             )}
           </SidebarGroupLabel>

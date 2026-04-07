@@ -10,10 +10,11 @@ import Dashboard from "./pages/Dashboard";
 import Directory from "./pages/Directory";
 import Attendance from "./pages/Attendance";
 import Tasks from "./pages/Tasks";
-import LeaveRequests from "./pages/LeaveRequests";
 import ProfileSettings from "./pages/ProfileSettings";
-import FrontDesk from "./pages/FrontDesk";
 import Kiosk from "./pages/Kiosk";
+import Inventory from "./pages/Inventory";
+import Chat from "./pages/Chat";
+import Calendar from "./pages/Calendar";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,9 +46,10 @@ const App = () => (
             <Route path="/directory" element={<ProtectedRoute><Directory /></ProtectedRoute>} />
             <Route path="/attendance" element={<ProtectedRoute><Attendance /></ProtectedRoute>} />
             <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
-            <Route path="/leave" element={<ProtectedRoute><LeaveRequests /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><ProfileSettings /></ProtectedRoute>} />
-            <Route path="/frontdesk" element={<ProtectedRoute><FrontDesk /></ProtectedRoute>} />
+            <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
+            <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+            <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
             <Route path="/kiosk" element={<Kiosk />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

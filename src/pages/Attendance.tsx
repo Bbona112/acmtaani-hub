@@ -29,7 +29,17 @@ export default function Attendance() {
     }
   };
 
-  useEffect(() => { loadRecords(); }, [user, role]);
+  useEffect(() => {
+    loadRecords();
+
+    // Real-time subscription
+    const channel = supabase
+      .channel('attendance-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, () => loadRecords())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user, role]);
 
   const clockIn = async () => {
     if (!user) return;
@@ -37,7 +47,6 @@ export default function Attendance() {
     const { error } = await supabase.from('attendance').insert({ user_id: user.id });
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
     else toast({ title: 'Clocked in!' });
-    await loadRecords();
     setLoading(false);
   };
 
@@ -53,7 +62,6 @@ export default function Attendance() {
       .eq('id', activeSession.id);
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
     else toast({ title: 'Clocked out!', description: `${hours} hours worked` });
-    await loadRecords();
     setLoading(false);
   };
 
@@ -63,7 +71,7 @@ export default function Attendance() {
         <div>
           <h1 className="text-2xl font-bold">Attendance</h1>
           <p className="text-muted-foreground mt-1">
-            {role === 'admin' ? 'View all staff attendance' : 'Track your daily attendance'}
+            {role === 'admin' ? 'View all staff attendance (real-time)' : 'Track your daily attendance (real-time)'}
           </p>
         </div>
         <div className="flex gap-2">
@@ -94,7 +102,7 @@ export default function Attendance() {
           <Table>
             <TableHeader>
               <TableRow>
-                {role === 'admin' && <TableHead>Employee</TableHead>}
+                {role === 'admin' && <TableHead>Member</TableHead>}
                 <TableHead>Date</TableHead>
                 <TableHead>Clock In</TableHead>
                 <TableHead>Clock Out</TableHead>
