@@ -102,7 +102,8 @@ export default function Chat() {
             <div className="space-y-4 py-2">
               {messages.map((msg) => {
                 const isMe = msg.sender_id === user?.id;
-                const initials = (msg.profiles?.full_name || '?')
+                const senderName = profiles[msg.sender_id] || 'Unknown';
+                const initials = senderName
                   .split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
                 return (
                   <div key={msg.id} className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''}`}>
@@ -111,7 +112,7 @@ export default function Chat() {
                     </Avatar>
                     <div className={`max-w-[70%] ${isMe ? 'text-right' : ''}`}>
                       <div className="flex items-baseline gap-2 mb-1">
-                        <span className="text-xs font-medium">{msg.profiles?.full_name || 'Unknown'}</span>
+                        <span className="text-xs font-medium">{senderName}</span>
                         <span className="text-[10px] text-muted-foreground">{format(new Date(msg.created_at), 'h:mm a')}</span>
                       </div>
                       <div className={`inline-block rounded-lg px-3 py-2 text-sm ${
