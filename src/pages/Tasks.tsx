@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 
 const COLUMNS = [
   { id: 'todo', label: 'To Do', color: 'bg-muted' },
@@ -26,11 +26,14 @@ export default function Tasks() {
   const [newTask, setNewTask] = useState({ title: '', description: '', assigned_to: '', due_date: '' });
 
   const loadTasks = async () => {
-    const { data } = await supabase
-      .from('tasks')
-      .select('*, profiles!tasks_assigned_to_fkey(full_name)')
-      .order('created_at', { ascending: false });
-    if (data) setTasks(data);
+    const { data } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
+    if (data) {
+      // Enrich with profile names
+      const { data: profs } = await supabase.from('profiles').select('user_id, full_name');
+      const profMap: Record<string, string> = {};
+      profs?.forEach(p => { profMap[p.user_id] = p.full_name; });
+      setTasks(data.map(t => ({ ...t, _assignee: profMap[t.assigned_to] || 'Unassigned' })));
+    }
   };
 
   const loadProfiles = async () => {
@@ -41,36 +44,32 @@ export default function Tasks() {
   useEffect(() => {
     loadTasks();
     if (role === 'admin') loadProfiles();
-
-    // Real-time subscription
-    const channel = supabase
-      .channel('tasks-realtime')
+    const channel = supabase.channel('tasks-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => loadTasks())
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [user, role]);
 
   const createTask = async () => {
     if (!newTask.title.trim() || !user) return;
     const { error } = await supabase.from('tasks').insert({
-      title: newTask.title,
-      description: newTask.description,
-      assigned_to: newTask.assigned_to || null,
-      created_by: user.id,
-      due_date: newTask.due_date || null,
+      title: newTask.title, description: newTask.description,
+      assigned_to: newTask.assigned_to || null, created_by: user.id, due_date: newTask.due_date || null,
     });
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else {
-      toast({ title: 'Task created' });
-      setDialogOpen(false);
-      setNewTask({ title: '', description: '', assigned_to: '', due_date: '' });
-    }
+    else { toast({ title: 'Task created' }); setDialogOpen(false); setNewTask({ title: '', description: '', assigned_to: '', due_date: '' }); }
   };
 
   const updateStatus = async (taskId: string, status: string) => {
     const { error } = await supabase.from('tasks').update({ status }).eq('id', taskId);
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
+  };
+
+  const deleteTask = async (taskId: string) => {
+    if (!confirm('Delete this task?')) return;
+    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    else toast({ title: 'Task deleted' });
   };
 
   return (
@@ -82,9 +81,7 @@ export default function Tasks() {
         </div>
         {role === 'admin' && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-2" /> New Task</Button>
-            </DialogTrigger>
+            <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" /> New Task</Button></DialogTrigger>
             <DialogContent>
               <DialogHeader><DialogTitle>Create Task</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-2">
@@ -92,11 +89,7 @@ export default function Tasks() {
                 <Textarea placeholder="Description" value={newTask.description} onChange={(e) => setNewTask({ ...newTask, description: e.target.value })} />
                 <Select value={newTask.assigned_to} onValueChange={(v) => setNewTask({ ...newTask, assigned_to: v })}>
                   <SelectTrigger><SelectValue placeholder="Assign to..." /></SelectTrigger>
-                  <SelectContent>
-                    {profiles.map((p) => (
-                      <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectContent>{profiles.map((p) => <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}</SelectItem>)}</SelectContent>
                 </Select>
                 <Input type="date" value={newTask.due_date} onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })} />
                 <Button onClick={createTask} className="w-full">Create Task</Button>
@@ -119,31 +112,28 @@ export default function Tasks() {
                 {colTasks.map((task) => (
                   <Card key={task.id} className="border-border/50 shadow-sm">
                     <CardContent className="p-4 space-y-2">
-                      <p className="font-medium text-sm">{task.title}</p>
+                      <div className="flex items-start justify-between">
+                        <p className="font-medium text-sm">{task.title}</p>
+                        {role === 'admin' && (
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-destructive" onClick={() => deleteTask(task.id)}><Trash2 className="h-3 w-3" /></Button>
+                        )}
+                      </div>
                       {task.description && <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>}
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">
-                          {(task as any).profiles?.full_name || 'Unassigned'}
-                        </span>
-                        {task.status !== 'done' && (
-                          <Select value={task.status} onValueChange={(v) => updateStatus(task.id, v)}>
-                            <SelectTrigger className="h-7 w-auto text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="todo">To Do</SelectItem>
-                              <SelectItem value="in_progress">In Progress</SelectItem>
-                              <SelectItem value="done">Done</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
+                        <span className="text-xs text-muted-foreground">{task._assignee}</span>
+                        <Select value={task.status} onValueChange={(v) => updateStatus(task.id, v)}>
+                          <SelectTrigger className="h-7 w-auto text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="todo">To Do</SelectItem>
+                            <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="done">Done</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </CardContent>
                   </Card>
                 ))}
-                {colTasks.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-8">No tasks</p>
-                )}
+                {colTasks.length === 0 && <p className="text-xs text-muted-foreground text-center py-8">No tasks</p>}
               </div>
             </div>
           );
