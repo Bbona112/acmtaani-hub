@@ -103,6 +103,7 @@ export type Database = {
       }
       inventory: {
         Row: {
+          asset_id: string | null
           available_quantity: number
           category: string | null
           created_at: string
@@ -115,6 +116,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          asset_id?: string | null
           available_quantity?: number
           category?: string | null
           created_at?: string
@@ -127,6 +129,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          asset_id?: string | null
           available_quantity?: number
           category?: string | null
           created_at?: string
@@ -226,6 +229,7 @@ export type Database = {
           created_at: string
           department: string | null
           email: string
+          employee_id: string | null
           full_name: string
           id: string
           phone: string | null
@@ -238,6 +242,7 @@ export type Database = {
           created_at?: string
           department?: string | null
           email?: string
+          employee_id?: string | null
           full_name?: string
           id?: string
           phone?: string | null
@@ -250,6 +255,7 @@ export type Database = {
           created_at?: string
           department?: string | null
           email?: string
+          employee_id?: string | null
           full_name?: string
           id?: string
           phone?: string | null
