@@ -44,8 +44,7 @@ export default function Attendance() {
   useEffect(() => {
     loadRecords();
     if (role === 'admin') loadProfiles();
-    const channel = supabase
-      .channel('attendance-realtime')
+    const channel = supabase.channel('attendance-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, () => loadRecords())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -71,6 +70,14 @@ export default function Attendance() {
     setLoading(false);
   };
 
+  const adminClockOut = async (record: any) => {
+    const now = new Date();
+    const hours = ((now.getTime() - new Date(record.clock_in).getTime()) / 3600000).toFixed(2);
+    const { error } = await supabase.from('attendance').update({ clock_out: now.toISOString(), hours_worked: parseFloat(hours) }).eq('id', record.id);
+    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    else toast({ title: 'Member clocked out', description: `${profileMap[record.user_id]?.name || 'Member'} — ${hours}h` });
+  };
+
   const profileMap = useMemo(() => {
     const m: Record<string, { name: string; empId: string }> = {};
     profiles.forEach(p => { m[p.user_id] = { name: p.full_name, empId: p.employee_id || '' }; });
@@ -79,7 +86,6 @@ export default function Attendance() {
 
   const filteredRecords = selectedUser === 'all' ? records : records.filter(r => r.user_id === selectedUser);
 
-  // Weekly hours per employee for bar chart
   const weekStart = startOfWeek(new Date());
   const weekEnd = endOfWeek(new Date());
   const weeklyData = useMemo(() => {
@@ -94,7 +100,6 @@ export default function Attendance() {
     })).sort((a, b) => b.hours - a.hours).slice(0, 10);
   }, [records, profileMap]);
 
-  // Status pie chart
   const statusData = useMemo(() => {
     const clockedIn = records.filter(r => !r.clock_out).length;
     const clockedOut = records.filter(r => r.clock_out).length;
@@ -102,6 +107,21 @@ export default function Attendance() {
   }, [records]);
 
   const currentlyClockedIn = records.filter(r => !r.clock_out);
+
+  const exportCSV = () => {
+    const data = filteredRecords.map(r => ({
+      Member: profileMap[r.user_id]?.name || '—',
+      Date: format(new Date(r.clock_in), 'yyyy-MM-dd'),
+      ClockIn: format(new Date(r.clock_in), 'HH:mm'),
+      ClockOut: r.clock_out ? format(new Date(r.clock_out), 'HH:mm') : '',
+      Hours: r.hours_worked || '',
+    }));
+    if (!data.length) return;
+    const csv = [Object.keys(data[0]).join(','), ...data.map(r => Object.values(r).join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob); link.download = 'attendance-report.csv'; link.click();
+  };
 
   return (
     <div className="space-y-6">
@@ -111,6 +131,7 @@ export default function Attendance() {
           <p className="text-muted-foreground mt-1">{role === 'admin' ? 'All staff attendance (real-time)' : 'Your daily attendance (real-time)'}</p>
         </div>
         <div className="flex gap-2">
+          {role === 'admin' && <Button variant="outline" size="sm" onClick={exportCSV}>Export CSV</Button>}
           {!activeSession ? (
             <Button onClick={clockIn} disabled={loading}><LogIn className="h-4 w-4 mr-2" /> Clock In</Button>
           ) : (
@@ -187,7 +208,7 @@ export default function Attendance() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRecords.slice(0, 50).map((r) => (
+                    {filteredRecords.slice(0, 50).map(r => (
                       <TableRow key={r.id}>
                         <TableCell>{profileMap[r.user_id]?.name || '—'}</TableCell>
                         <TableCell>{format(new Date(r.clock_in), 'MMM d, yyyy')}</TableCell>
@@ -209,16 +230,21 @@ export default function Attendance() {
               <CardHeader><CardTitle className="text-lg flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[hsl(var(--success))] animate-pulse" /> Currently Clocked In ({currentlyClockedIn.length})</CardTitle></CardHeader>
               <CardContent>
                 <Table>
-                  <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead>Employee ID</TableHead><TableHead>Clocked In At</TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead>Employee ID</TableHead><TableHead>Clocked In At</TableHead><TableHead></TableHead></TableRow></TableHeader>
                   <TableBody>
                     {currentlyClockedIn.map(r => (
                       <TableRow key={r.id}>
                         <TableCell className="font-medium">{profileMap[r.user_id]?.name || '—'}</TableCell>
                         <TableCell className="font-mono text-xs">{profileMap[r.user_id]?.empId || '—'}</TableCell>
                         <TableCell>{format(new Date(r.clock_in), 'h:mm a')}</TableCell>
+                        <TableCell>
+                          <Button size="sm" variant="outline" onClick={() => adminClockOut(r)}>
+                            <LogOut className="h-3 w-3 mr-1" /> Clock Out
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
-                    {currentlyClockedIn.length === 0 && <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-8">No one currently clocked in</TableCell></TableRow>}
+                    {currentlyClockedIn.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No one currently clocked in</TableCell></TableRow>}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -234,7 +260,7 @@ export default function Attendance() {
             <Table>
               <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Clock In</TableHead><TableHead>Clock Out</TableHead><TableHead>Hours</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
               <TableBody>
-                {records.map((r) => (
+                {records.map(r => (
                   <TableRow key={r.id}>
                     <TableCell>{format(new Date(r.clock_in), 'MMM d, yyyy')}</TableCell>
                     <TableCell>{format(new Date(r.clock_in), 'h:mm a')}</TableCell>

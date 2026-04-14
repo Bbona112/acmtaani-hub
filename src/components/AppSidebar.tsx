@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, Users, Clock, ListTodo, LogOut, Settings, Monitor, Package, MessageCircle, CalendarDays, Upload } from 'lucide-react';
+import { LayoutDashboard, Users, Clock, ListTodo, LogOut, Settings, Monitor, Package, MessageCircle, CalendarDays, Upload, ClipboardList, Bell } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,6 +18,7 @@ const navItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'My Tasks', url: '/tasks', icon: ListTodo },
   { title: 'Attendance', url: '/attendance', icon: Clock },
+  { title: 'Duty Roster', url: '/duty-roster', icon: ClipboardList },
   { title: 'Directory', url: '/directory', icon: Users },
   { title: 'Inventory', url: '/inventory', icon: Package },
   { title: 'Chat', url: '/chat', icon: MessageCircle },
@@ -36,9 +37,7 @@ export function AppSidebar() {
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    // Load site logo
     const { data } = supabase.storage.from('site-assets').getPublicUrl('logo.png');
-    // Check if it exists by trying to fetch it
     fetch(data.publicUrl, { method: 'HEAD' }).then(r => { if (r.ok) setLogoUrl(data.publicUrl + '?t=' + Date.now()); }).catch(() => {});
   }, []);
 
@@ -51,14 +50,12 @@ export function AppSidebar() {
     else {
       const { data } = supabase.storage.from('site-assets').getPublicUrl('logo.png');
       setLogoUrl(data.publicUrl + '?t=' + Date.now());
-      toast({ title: 'Logo uploaded!' });
-      setLogoDialogOpen(false);
+      toast({ title: 'Logo uploaded!' }); setLogoDialogOpen(false);
     }
     setUploading(false);
   };
 
-  const initials = profile?.full_name
-    ? profile.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) : '?';
+  const initials = profile?.full_name ? profile.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) : '?';
 
   return (
     <Sidebar collapsible="icon">
@@ -85,7 +82,7 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent className="mt-2">
             <SidebarMenu>
-              {navItems.map((item) => (
+              {navItems.map(item => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink to={item.url} end={item.url === '/'} className="hover:bg-sidebar-accent/50" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
