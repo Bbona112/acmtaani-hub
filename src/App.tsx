@@ -15,6 +15,7 @@ import Kiosk from "./pages/Kiosk";
 import Inventory from "./pages/Inventory";
 import Chat from "./pages/Chat";
 import Calendar from "./pages/Calendar";
+import DutyRoster from "./pages/DutyRoster";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +51,7 @@ const App = () => (
             <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
             <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
             <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+            <Route path="/duty-roster" element={<ProtectedRoute><DutyRoster /></ProtectedRoute>} />
             <Route path="/kiosk" element={<Kiosk />} />
             <Route path="*" element={<NotFound />} />
           </Routes>

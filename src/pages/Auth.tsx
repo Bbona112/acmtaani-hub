@@ -1,11 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { lovable } from '@/integrations/lovable/index';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { Building2 } from 'lucide-react';
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -14,37 +13,34 @@ export default function Auth() {
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const { data } = supabase.storage.from('site-assets').getPublicUrl('logo.png');
+    fetch(data.publicUrl, { method: 'HEAD' }).then(r => { if (r.ok) setLogoUrl(data.publicUrl + '?t=' + Date.now()); }).catch(() => {});
+  }, []);
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
-    const result = await lovable.auth.signInWithOAuth('google', {
-      redirect_uri: window.location.origin,
-    });
-    if (result.error) {
-      toast({ title: 'Google sign-in failed', description: String(result.error), variant: 'destructive' });
-    }
+    const result = await lovable.auth.signInWithOAuth('google', { redirect_uri: window.location.origin });
+    if (result.error) toast({ title: 'Google sign-in failed', description: String(result.error), variant: 'destructive' });
     setGoogleLoading(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     if (isLogin) {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) toast({ title: 'Login failed', description: error.message, variant: 'destructive' });
     } else {
       const { error } = await supabase.auth.signUp({
-        email,
-        password,
+        email, password,
         options: { data: { full_name: fullName }, emailRedirectTo: window.location.origin },
       });
-      if (error) {
-        toast({ title: 'Sign up failed', description: error.message, variant: 'destructive' });
-      } else {
-        toast({ title: 'Check your email', description: 'We sent you a confirmation link.' });
-      }
+      if (error) toast({ title: 'Sign up failed', description: error.message, variant: 'destructive' });
+      else toast({ title: 'Check your email', description: 'We sent you a confirmation link.' });
     }
     setLoading(false);
   };
@@ -53,40 +49,24 @@ export default function Auth() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md shadow-lg border-border/50">
         <CardHeader className="text-center space-y-2">
-          <div className="mx-auto w-12 h-12 rounded-xl bg-primary flex items-center justify-center mb-2">
-            <Building2 className="h-6 w-6 text-primary-foreground" />
+          <div className="mx-auto mb-2">
+            {logoUrl ? (
+              <img src={logoUrl} alt="ACMtaani Hub" className="w-16 h-16 rounded-xl object-contain mx-auto" />
+            ) : (
+              <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center mx-auto">
+                <span className="text-primary-foreground text-2xl font-bold">A</span>
+              </div>
+            )}
           </div>
           <CardTitle className="text-2xl font-bold">{isLogin ? 'Welcome back' : 'Create account'}</CardTitle>
-          <CardDescription>{isLogin ? 'Sign in to your EMS account' : 'Get started with your EMS account'}</CardDescription>
+          <CardDescription>{isLogin ? 'Sign in to ACMtaani Hub' : 'Get started with ACMtaani Hub'}</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <Input
-                placeholder="Full name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-              />
-            )}
-            <Input
-              type="email"
-              placeholder="Email address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-            <Input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-            />
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Please wait...' : isLogin ? 'Sign in' : 'Sign up'}
-            </Button>
+            {!isLogin && <Input placeholder="Full name" value={fullName} onChange={e => setFullName(e.target.value)} required />}
+            <Input type="email" placeholder="Email address" value={email} onChange={e => setEmail(e.target.value)} required />
+            <Input type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
+            <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Please wait...' : isLogin ? 'Sign in' : 'Sign up'}</Button>
           </form>
           <div className="relative my-4">
             <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
@@ -98,12 +78,7 @@ export default function Auth() {
           </Button>
           <p className="mt-4 text-center text-sm text-muted-foreground">
             {isLogin ? "Don't have an account?" : 'Already have an account?'}{' '}
-            <button
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-primary font-medium hover:underline"
-            >
-              {isLogin ? 'Sign up' : 'Sign in'}
-            </button>
+            <button onClick={() => setIsLogin(!isLogin)} className="text-primary font-medium hover:underline">{isLogin ? 'Sign up' : 'Sign in'}</button>
           </p>
         </CardContent>
       </Card>
