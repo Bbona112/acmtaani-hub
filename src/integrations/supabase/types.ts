@@ -328,6 +328,7 @@ export type Database = {
           employee_id: string | null
           full_name: string
           id: string
+          onboarding_completed: boolean
           phone: string | null
           position: string | null
           updated_at: string
@@ -341,6 +342,7 @@ export type Database = {
           employee_id?: string | null
           full_name?: string
           id?: string
+          onboarding_completed?: boolean
           phone?: string | null
           position?: string | null
           updated_at?: string
@@ -354,6 +356,7 @@ export type Database = {
           employee_id?: string | null
           full_name?: string
           id?: string
+          onboarding_completed?: boolean
           phone?: string | null
           position?: string | null
           updated_at?: string
@@ -363,34 +366,49 @@ export type Database = {
       }
       tasks: {
         Row: {
+          approval_status: string
+          approved_at: string | null
+          approved_by: string | null
           assigned_to: string | null
           created_at: string
           created_by: string | null
           description: string | null
           due_date: string | null
           id: string
+          priority: string
+          progress: number
           status: string
           title: string
           updated_at: string
         }
         Insert: {
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           assigned_to?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
           due_date?: string | null
           id?: string
+          priority?: string
+          progress?: number
           status?: string
           title: string
           updated_at?: string
         }
         Update: {
+          approval_status?: string
+          approved_at?: string | null
+          approved_by?: string | null
           assigned_to?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
           due_date?: string | null
           id?: string
+          priority?: string
+          progress?: number
           status?: string
           title?: string
           updated_at?: string
@@ -465,7 +483,36 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      directory_profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          department: string | null
+          full_name: string | null
+          id: string | null
+          position: string | null
+          user_id: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          department?: string | null
+          full_name?: string | null
+          id?: string | null
+          position?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          department?: string | null
+          full_name?: string | null
+          id?: string | null
+          position?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {
