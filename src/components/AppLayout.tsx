@@ -2,6 +2,8 @@ import { ReactNode } from 'react';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
 import { NotificationBell } from './NotificationBell';
+import { ThemeToggle } from './ThemeToggle';
+import { Onboarding } from './Onboarding';
 
 export function AppLayout({ children }: { children: ReactNode }) {
   return (
@@ -11,11 +13,15 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <div className="flex-1 flex flex-col">
           <header className="h-14 flex items-center justify-between border-b border-border bg-card px-4">
             <SidebarTrigger />
-            <NotificationBell />
+            <div className="flex items-center gap-1">
+              <ThemeToggle />
+              <NotificationBell />
+            </div>
           </header>
           <main className="flex-1 p-6 overflow-auto">
             {children}
           </main>
+          <Onboarding />
         </div>
       </div>
     </SidebarProvider>
