@@ -113,8 +113,9 @@ export default function FrontDesk() {
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
     else { setNewField({ field_key: '', field_label: '', field_type: 'text', required: false }); loadAll(); }
   };
-  const toggleField = async (id: string, key: string, val: boolean) => {
-    await supabase.from('visitor_form_fields').update({ [key]: val }).eq('id', id);
+  const toggleField = async (id: string, key: 'required' | 'enabled', val: boolean) => {
+    const update = key === 'required' ? { required: val } : { enabled: val };
+    await supabase.from('visitor_form_fields').update(update).eq('id', id);
     loadAll();
   };
   const deleteField = async (id: string) => {
