@@ -14,6 +14,108 @@ export type Database = {
   }
   public: {
     Tables: {
+      asset_sessions: {
+        Row: {
+          asset_id: string
+          created_at: string
+          ended_at: string | null
+          id: string
+          issued_by: string | null
+          notes: string | null
+          started_at: string
+          user_id: string | null
+          user_name: string
+          visitor_id: string | null
+        }
+        Insert: {
+          asset_id: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          issued_by?: string | null
+          notes?: string | null
+          started_at?: string
+          user_id?: string | null
+          user_name?: string
+          visitor_id?: string | null
+        }
+        Update: {
+          asset_id?: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          issued_by?: string | null
+          notes?: string | null
+          started_at?: string
+          user_id?: string | null
+          user_name?: string
+          visitor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_sessions_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_sessions_visitor_id_fkey"
+            columns: ["visitor_id"]
+            isOneToOne: false
+            referencedRelation: "visitors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assets: {
+        Row: {
+          asset_tag: string | null
+          asset_type: string
+          battery_charging: boolean | null
+          battery_percent: number | null
+          battery_updated_at: string | null
+          created_at: string
+          id: string
+          location: string | null
+          name: string
+          notes: string | null
+          serial_number: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          asset_tag?: string | null
+          asset_type?: string
+          battery_charging?: boolean | null
+          battery_percent?: number | null
+          battery_updated_at?: string | null
+          created_at?: string
+          id?: string
+          location?: string | null
+          name: string
+          notes?: string | null
+          serial_number?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          asset_tag?: string | null
+          asset_type?: string
+          battery_charging?: boolean | null
+          battery_percent?: number | null
+          battery_updated_at?: string | null
+          created_at?: string
+          id?: string
+          location?: string | null
+          name?: string
+          notes?: string | null
+          serial_number?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       attendance: {
         Row: {
           clock_in: string
@@ -38,6 +140,48 @@ export type Database = {
           hours_worked?: number | null
           id?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      books: {
+        Row: {
+          authors: string | null
+          book_id: string | null
+          copies_available: number
+          copies_total: number
+          created_at: string
+          id: string
+          isbn: string | null
+          publisher: string | null
+          title: string
+          updated_at: string
+          year: number | null
+        }
+        Insert: {
+          authors?: string | null
+          book_id?: string | null
+          copies_available?: number
+          copies_total?: number
+          created_at?: string
+          id?: string
+          isbn?: string | null
+          publisher?: string | null
+          title: string
+          updated_at?: string
+          year?: number | null
+        }
+        Update: {
+          authors?: string | null
+          book_id?: string | null
+          copies_available?: number
+          copies_total?: number
+          created_at?: string
+          id?: string
+          isbn?: string | null
+          publisher?: string | null
+          title?: string
+          updated_at?: string
+          year?: number | null
         }
         Relationships: []
       }
@@ -247,6 +391,30 @@ export type Database = {
           },
         ]
       }
+      kiosk_settings: {
+        Row: {
+          exit_pin: string
+          google_sheet_url: string | null
+          id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          exit_pin?: string
+          google_sheet_url?: string | null
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          exit_pin?: string
+          google_sheet_url?: string | null
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       leave_requests: {
         Row: {
           created_at: string
@@ -436,6 +604,42 @@ export type Database = {
         }
         Relationships: []
       }
+      visitor_form_fields: {
+        Row: {
+          created_at: string
+          display_order: number
+          enabled: boolean
+          field_key: string
+          field_label: string
+          field_type: string
+          id: string
+          required: boolean
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_order?: number
+          enabled?: boolean
+          field_key: string
+          field_label: string
+          field_type?: string
+          id?: string
+          required?: boolean
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_order?: number
+          enabled?: boolean
+          field_key?: string
+          field_label?: string
+          field_type?: string
+          id?: string
+          required?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       visitors: {
         Row: {
           badge_number: string | null
@@ -444,11 +648,14 @@ export type Database = {
           checked_in_by: string | null
           company: string | null
           created_at: string
+          extra_fields: Json | null
           host_employee_id: string | null
           host_name: string | null
           id: string
           notes: string | null
+          phone: string | null
           purpose: string | null
+          source: string
           visitor_name: string
         }
         Insert: {
@@ -458,11 +665,14 @@ export type Database = {
           checked_in_by?: string | null
           company?: string | null
           created_at?: string
+          extra_fields?: Json | null
           host_employee_id?: string | null
           host_name?: string | null
           id?: string
           notes?: string | null
+          phone?: string | null
           purpose?: string | null
+          source?: string
           visitor_name: string
         }
         Update: {
@@ -472,11 +682,14 @@ export type Database = {
           checked_in_by?: string | null
           company?: string | null
           created_at?: string
+          extra_fields?: Json | null
           host_employee_id?: string | null
           host_name?: string | null
           id?: string
           notes?: string | null
+          phone?: string | null
           purpose?: string | null
+          source?: string
           visitor_name?: string
         }
         Relationships: []
