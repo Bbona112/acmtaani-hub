@@ -34,11 +34,12 @@ export default function Kiosk() {
     const userId = decodedText.replace('EMS:', '');
 
     try {
-      const { data: profile } = await supabase
-        .from('profiles')
+      const { data: profile } = await (supabase as any)
+        .from('directory_profiles')
         .select('full_name')
         .eq('user_id', userId)
         .maybeSingle();
+
 
       if (!profile) {
         setLastResult({ type: 'error', name: '', message: 'Member not found', time: format(new Date(), 'h:mm:ss a') });

@@ -23,7 +23,7 @@ export default function Dashboard() {
       if (!user) return;
 
       const [profilesRes, attendanceRes, myTasksRes, totalTasksRes, doneTasksRes, inventoryRes, checkoutsRes, eventsRes, messagesRes, notifRes] = await Promise.all([
-        supabase.from('profiles').select('id', { count: 'exact', head: true }),
+        (supabase as any).from('directory_profiles').select('id', { count: 'exact', head: true }),
         supabase.from('attendance').select('id', { count: 'exact', head: true }).is('clock_out', null),
         supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('assigned_to', user.id).neq('status', 'done'),
         supabase.from('tasks').select('id', { count: 'exact', head: true }).neq('status', 'done'),
