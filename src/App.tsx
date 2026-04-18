@@ -16,6 +16,11 @@ import Inventory from "./pages/Inventory";
 import Chat from "./pages/Chat";
 import Calendar from "./pages/Calendar";
 import DutyRoster from "./pages/DutyRoster";
+import FrontDesk from "./pages/FrontDesk";
+import VisitorKiosk from "./pages/VisitorKiosk";
+import Assets from "./pages/Assets";
+import Books from "./pages/Books";
+import DeviceKiosk from "./pages/DeviceKiosk";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -52,7 +57,12 @@ const App = () => (
             <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
             <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
             <Route path="/duty-roster" element={<ProtectedRoute><DutyRoster /></ProtectedRoute>} />
+            <Route path="/front-desk" element={<ProtectedRoute><FrontDesk /></ProtectedRoute>} />
+            <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
+            <Route path="/books" element={<ProtectedRoute><Books /></ProtectedRoute>} />
             <Route path="/kiosk" element={<Kiosk />} />
+            <Route path="/visitor-kiosk" element={<VisitorKiosk />} />
+            <Route path="/device/:tag" element={<DeviceKiosk />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
