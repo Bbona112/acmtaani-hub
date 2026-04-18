@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LayoutDashboard, Users, Clock, ListTodo, LogOut, Settings, Monitor, Package, MessageCircle, CalendarDays, Upload, ClipboardList, Bell } from 'lucide-react';
+import { LayoutDashboard, Users, Clock, ListTodo, LogOut, Settings, Monitor, Package, MessageCircle, CalendarDays, Upload, ClipboardList, UserCheck, Laptop, BookOpen } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,7 +19,10 @@ const navItems = [
   { title: 'My Tasks', url: '/tasks', icon: ListTodo },
   { title: 'Attendance', url: '/attendance', icon: Clock },
   { title: 'Duty Roster', url: '/duty-roster', icon: ClipboardList },
+  { title: 'Front Desk', url: '/front-desk', icon: UserCheck },
   { title: 'Directory', url: '/directory', icon: Users },
+  { title: 'Assets', url: '/assets', icon: Laptop },
+  { title: 'Library', url: '/books', icon: BookOpen },
   { title: 'Inventory', url: '/inventory', icon: Package },
   { title: 'Chat', url: '/chat', icon: MessageCircle },
   { title: 'Calendar', url: '/calendar', icon: CalendarDays },
