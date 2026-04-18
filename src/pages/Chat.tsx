@@ -31,12 +31,12 @@ export default function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const loadProfiles = async () => {
-    const { data } = await supabase.from('profiles').select('user_id, full_name, avatar_url');
+    const { data } = await (supabase as any).from('directory_profiles').select('user_id, full_name, avatar_url');
     if (data) {
       const map: Record<string, any> = {};
-      data.forEach(p => { map[p.user_id] = p; });
+      data.forEach((p: any) => { map[p.user_id] = p; });
       setProfiles(map);
-      setProfileList(data.filter(p => p.user_id !== user?.id));
+      setProfileList(data.filter((p: any) => p.user_id !== user?.id));
     }
   };
 

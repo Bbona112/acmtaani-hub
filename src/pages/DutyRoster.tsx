@@ -37,7 +37,7 @@ export default function DutyRoster() {
   };
 
   const loadProfiles = async () => {
-    const { data } = await supabase.from('profiles').select('user_id, full_name, position').order('full_name');
+    const { data } = await (supabase as any).from('directory_profiles').select('user_id, full_name, position').order('full_name');
     if (data) setProfiles(data);
   };
 

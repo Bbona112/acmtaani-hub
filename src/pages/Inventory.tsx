@@ -49,8 +49,8 @@ export default function Inventory() {
   };
 
   const loadProfiles = async () => {
-    const { data } = await supabase.from('profiles').select('user_id, full_name');
-    if (data) { const m: Record<string, string> = {}; data.forEach(p => m[p.user_id] = p.full_name); setProfiles(m); }
+    const { data } = await (supabase as any).from('directory_profiles').select('user_id, full_name');
+    if (data) { const m: Record<string, string> = {}; data.forEach((p: any) => m[p.user_id] = p.full_name); setProfiles(m); }
   };
 
   useEffect(() => {
