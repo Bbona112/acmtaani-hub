@@ -23,15 +23,19 @@ export default function Directory() {
   const [editRole, setEditRole] = useState('');
 
   const load = async () => {
-    const { data } = await supabase.from('profiles').select('*').order('full_name');
-    if (data) setProfiles(data);
+    // For admins: full profile data (admin RLS allows). For others: safe directory view.
     if (role === 'admin') {
+      const { data } = await supabase.from('profiles').select('*').order('full_name');
+      if (data) setProfiles(data);
       const { data: r } = await supabase.from('user_roles').select('user_id, role');
       if (r) {
         const m: Record<string, string> = {};
         r.forEach((x: any) => { m[x.user_id] = x.role; });
         setRoles(m);
       }
+    } else {
+      const { data } = await (supabase as any).from('directory_profiles').select('*').order('full_name');
+      if (data) setProfiles(data);
     }
   };
 

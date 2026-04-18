@@ -37,7 +37,10 @@ export default function Attendance() {
   };
 
   const loadProfiles = async () => {
-    const { data } = await supabase.from('profiles').select('user_id, full_name, employee_id');
+    // Admin: needs employee_id (allowed by admin RLS). Non-admin uses safe view.
+    const src = role === 'admin' ? supabase.from('profiles').select('user_id, full_name, employee_id')
+      : (supabase as any).from('directory_profiles').select('user_id, full_name');
+    const { data } = await src;
     if (data) setProfiles(data);
   };
 
