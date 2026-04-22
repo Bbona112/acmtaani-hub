@@ -14,6 +14,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Laptop, Plus, ArrowRightLeft, Trash2, Battery, BatteryCharging, Activity, Pencil, Download } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Progress } from '@/components/ui/progress';
+import { TablePaginationControls } from '@/components/TablePaginationControls';
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { getAppSettings } from '@/lib/appSettings';
 
 export default function Assets() {
   const { user, role } = useAuth();
@@ -26,9 +29,10 @@ export default function Assets() {
   const [issueOpen, setIssueOpen] = useState(false);
   const [editAsset, setEditAsset] = useState<any>(null);
   const [selected, setSelected] = useState<any>(null);
-  const [newAsset, setNewAsset] = useState({ name: '', asset_type: 'chromebook', serial_number: '', notes: '' });
-  const [issueTo, setIssueTo] = useState({ kind: 'user', id: '', name: '', notes: '' });
+  const [newAsset, setNewAsset] = useState({ name: '', asset_type: 'chromebook', custom_asset_type: '', serial_number: '', notes: '' });
+  const [issueTo, setIssueTo] = useState({ kind: 'user', id: '', name: '', notes: '', location: '' });
   const [filterType, setFilterType] = useState('all');
+  const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
 
   const loadAll = async () => {
     const [a, s, p, v] = await Promise.all([
@@ -54,9 +58,15 @@ export default function Assets() {
 
   const addAsset = async () => {
     if (!newAsset.name.trim()) { toast({ title: 'Name required', variant: 'destructive' }); return; }
-    const { error } = await supabase.from('assets').insert(newAsset);
+    const typeToUse = newAsset.asset_type === 'custom' ? newAsset.custom_asset_type.trim().toLowerCase() : newAsset.asset_type;
+    const { error } = await supabase.from('assets').insert({
+      name: newAsset.name,
+      asset_type: typeToUse || 'other',
+      serial_number: newAsset.serial_number,
+      notes: newAsset.notes,
+    } as any);
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else { toast({ title: 'Asset added' }); setNewAsset({ name: '', asset_type: 'chromebook', serial_number: '', notes: '' }); setAddOpen(false); }
+    else { toast({ title: 'Asset added' }); setNewAsset({ name: '', asset_type: 'chromebook', custom_asset_type: '', serial_number: '', notes: '' }); setAddOpen(false); }
   };
   const updateAsset = async () => {
     const { id, asset_tag, created_at, updated_at, battery_percent, battery_charging, battery_updated_at, ...rest } = editAsset;
@@ -78,9 +88,9 @@ export default function Assets() {
     if (issueTo.kind === 'visitor') sessionData.visitor_id = issueTo.id;
     const { error: e1 } = await supabase.from('asset_sessions').insert(sessionData);
     if (e1) { toast({ title: 'Error', description: e1.message, variant: 'destructive' }); return; }
-    await supabase.from('assets').update({ status: 'in_use' }).eq('id', selected.id);
+    await supabase.from('assets').update({ status: 'in_use', location: issueTo.location || null }).eq('id', selected.id);
     toast({ title: `${selected.name} issued to ${issueTo.name}` });
-    setIssueOpen(false); setSelected(null); setIssueTo({ kind: 'user', id: '', name: '', notes: '' });
+    setIssueOpen(false); setSelected(null); setIssueTo({ kind: 'user', id: '', name: '', notes: '', location: '' });
   };
 
   const returnAsset = async (asset: any) => {
@@ -95,6 +105,16 @@ export default function Assets() {
   const inSafe = assets.filter(a => a.status === 'in_safe').length;
 
   const sessionFor = (assetId: string) => sessions.find(s => s.asset_id === assetId);
+  const typeOptions = Array.from(new Set(assets.map((a) => a.asset_type).filter(Boolean)));
+  const pagination = useTablePagination(filtered, rowsPerPageDefault);
+
+  useEffect(() => {
+    getAppSettings().then((s) => {
+      setRowsPerPageDefault(s.rows_per_page);
+      pagination.setRowsPerPage(s.rows_per_page);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const exportCSV = () => {
     const rows = [['Tag', 'Name', 'Type', 'Status', 'User', 'Battery', 'Started']];
@@ -112,7 +132,7 @@ export default function Assets() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Trackable Assets</h1>
-          <p className="text-muted-foreground mt-1">Chromebooks, iMacs, iPads & live device sessions</p>
+          <p className="text-muted-foreground mt-1">HP laptops and other trackable devices with live telemetry</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportCSV}><Download className="h-4 w-4 mr-2" />Export</Button>
@@ -128,11 +148,21 @@ export default function Assets() {
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="chromebook">Chromebook</SelectItem>
+                        <SelectItem value="hp_laptop">HP Laptop</SelectItem>
                         <SelectItem value="imac">iMac</SelectItem>
                         <SelectItem value="ipad">iPad</SelectItem>
                         <SelectItem value="other">Other</SelectItem>
+                        <SelectItem value="custom">Add custom type</SelectItem>
                       </SelectContent>
                     </Select>
+                    {newAsset.asset_type === 'custom' && (
+                      <Input
+                        className="mt-2"
+                        placeholder="Type e.g. projector_laptop"
+                        value={newAsset.custom_asset_type}
+                        onChange={(e) => setNewAsset({ ...newAsset, custom_asset_type: e.target.value })}
+                      />
+                    )}
                   </div>
                   <div><Label>Serial Number</Label><Input value={newAsset.serial_number} onChange={(e) => setNewAsset({ ...newAsset, serial_number: e.target.value })} /></div>
                   <div><Label>Notes</Label><Input value={newAsset.notes} onChange={(e) => setNewAsset({ ...newAsset, notes: e.target.value })} /></div>
@@ -154,8 +184,12 @@ export default function Assets() {
         <TabsList>
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="chromebook">Chromebooks</TabsTrigger>
+          <TabsTrigger value="hp_laptop">HP Laptops</TabsTrigger>
           <TabsTrigger value="imac">iMacs</TabsTrigger>
           <TabsTrigger value="ipad">iPads</TabsTrigger>
+          {typeOptions.filter((t) => !['chromebook', 'hp_laptop', 'imac', 'ipad'].includes(t)).map((t) => (
+            <TabsTrigger key={t} value={t} className="capitalize">{t}</TabsTrigger>
+          ))}
         </TabsList>
         <TabsContent value={filterType}>
           <Card>
@@ -168,8 +202,16 @@ export default function Assets() {
                   <TableHead>Current User</TableHead><TableHead>Started</TableHead><TableHead></TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  {filtered.map(a => {
+                  {pagination.pagedRows.map(a => {
                     const s = sessionFor(a.id);
+                    const staleMins = a.battery_updated_at ? Math.round((Date.now() - new Date(a.battery_updated_at).getTime()) / 60000) : null;
+                    const batteryLabel = a.battery_percent == null
+                      ? 'No telemetry'
+                      : a.battery_percent < 20
+                        ? 'Critical'
+                        : a.battery_percent < 40
+                          ? 'Low'
+                          : 'Healthy';
                     return (
                       <TableRow key={a.id}>
                         <TableCell className="font-mono text-xs">{a.asset_tag}</TableCell>
@@ -182,12 +224,14 @@ export default function Assets() {
                         </TableCell>
                         <TableCell>
                           {a.battery_percent != null ? (
-                            <div className="flex items-center gap-2 w-24">
+                            <div className="flex items-center gap-2 w-40">
                               {a.battery_charging ? <BatteryCharging className="h-4 w-4 text-[hsl(var(--success))]" /> : <Battery className="h-4 w-4" />}
                               <Progress value={a.battery_percent} className="h-2 flex-1" />
                               <span className="text-xs tabular-nums">{a.battery_percent}%</span>
+                              <span className="text-[10px] text-muted-foreground">{batteryLabel}</span>
                             </div>
-                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                          ) : <span className="text-xs text-muted-foreground">No telemetry</span>}
+                          {staleMins != null && <p className="text-[10px] text-muted-foreground">Updated {staleMins}m ago</p>}
                         </TableCell>
                         <TableCell>{s ? <span className="font-medium">{s.user_name}</span> : <span className="text-muted-foreground">—</span>}</TableCell>
                         <TableCell className="text-xs">{s ? formatDistanceToNow(new Date(s.started_at), { addSuffix: true }) : '—'}</TableCell>
@@ -212,6 +256,13 @@ export default function Assets() {
                   {filtered.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No assets</TableCell></TableRow>}
                 </TableBody>
               </Table>
+              <TablePaginationControls
+                page={pagination.page}
+                totalPages={pagination.totalPages}
+                rowsPerPage={pagination.rowsPerPage}
+                onPageChange={pagination.setPage}
+                onRowsPerPageChange={pagination.setRowsPerPage}
+              />
               <p className="text-xs text-muted-foreground mt-3">
                 💡 To enable live battery tracking on a device, open <code className="px-1 bg-muted rounded">/device/&lt;asset_tag&gt;</code> in that Chromebook's browser.
               </p>
@@ -252,6 +303,7 @@ export default function Assets() {
               {issueTo.kind === 'visitor' && visitors.length === 0 && <p className="text-xs text-muted-foreground mt-1">No signed-in visitors.</p>}
             </div>
             <div><Label>Notes</Label><Input value={issueTo.notes} onChange={(e) => setIssueTo({ ...issueTo, notes: e.target.value })} /></div>
+            <div><Label>Location</Label><Input value={issueTo.location} onChange={(e) => setIssueTo({ ...issueTo, location: e.target.value })} placeholder="Where this device is being used" /></div>
             <Button onClick={issue} className="w-full">Issue Device</Button>
           </div>
         </DialogContent>

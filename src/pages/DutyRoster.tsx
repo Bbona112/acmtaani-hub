@@ -12,8 +12,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { Plus, CalendarDays, Users, Trash2, BarChart3 } from 'lucide-react';
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay, parseISO } from 'date-fns';
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, eachDayOfInterval, isSameDay, parseISO, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { TablePaginationControls } from '@/components/TablePaginationControls';
+import { getAppSettings } from '@/lib/appSettings';
 
 export default function DutyRoster() {
   const { user, role } = useAuth();
@@ -21,17 +24,22 @@ export default function DutyRoster() {
   const [entries, setEntries] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   const [addOpen, setAddOpen] = useState(false);
+  const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
   const [newEntry, setNewEntry] = useState({ user_id: '', date: '', shift_start: '09:00', shift_end: '17:00', role_label: '', notes: '' });
 
   const weekStart = startOfWeek(currentWeek);
   const weekEnd = endOfWeek(currentWeek);
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
+  const monthStart = startOfMonth(currentWeek);
+  const monthEnd = endOfMonth(currentWeek);
+  const monthDays = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
   const load = async () => {
     const { data } = await supabase.from('duty_roster').select('*')
-      .gte('date', format(weekStart, 'yyyy-MM-dd'))
-      .lte('date', format(weekEnd, 'yyyy-MM-dd'))
+      .gte('date', format(viewMode === 'week' ? weekStart : monthStart, 'yyyy-MM-dd'))
+      .lte('date', format(viewMode === 'week' ? weekEnd : monthEnd, 'yyyy-MM-dd'))
       .order('date');
     if (data) setEntries(data);
   };
@@ -41,7 +49,7 @@ export default function DutyRoster() {
     if (data) setProfiles(data);
   };
 
-  useEffect(() => { load(); loadProfiles(); }, [currentWeek]);
+  useEffect(() => { load(); loadProfiles(); }, [currentWeek, viewMode]);
 
   const profileMap = useMemo(() => {
     const m: Record<string, any> = {};
@@ -72,13 +80,22 @@ export default function DutyRoster() {
 
   // My shifts
   const myShifts = entries.filter(e => e.user_id === user?.id);
+  const myShiftPagination = useTablePagination(myShifts, rowsPerPageDefault);
+
+  useEffect(() => {
+    getAppSettings().then((s) => {
+      setRowsPerPageDefault(s.rows_per_page);
+      myShiftPagination.setRowsPerPage(s.rows_per_page);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Duty Roster</h1>
-          <p className="text-muted-foreground mt-1">Weekly shift schedule for team members</p>
+          <p className="text-muted-foreground mt-1">Weekly and monthly shift schedule for team members</p>
         </div>
         {role === 'admin' && (
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -105,10 +122,12 @@ export default function DutyRoster() {
       </div>
 
       {/* Week navigation */}
-      <div className="flex items-center justify-center gap-4">
-        <Button variant="ghost" size="sm" onClick={() => setCurrentWeek(subWeeks(currentWeek, 1))}>← Prev</Button>
-        <span className="font-semibold">{format(weekStart, 'MMM d')} – {format(weekEnd, 'MMM d, yyyy')}</span>
-        <Button variant="ghost" size="sm" onClick={() => setCurrentWeek(addWeeks(currentWeek, 1))}>Next →</Button>
+      <div className="flex items-center justify-center gap-4 flex-wrap">
+        <Button variant={viewMode === 'week' ? 'default' : 'outline'} size="sm" onClick={() => setViewMode('week')}>Week</Button>
+        <Button variant={viewMode === 'month' ? 'default' : 'outline'} size="sm" onClick={() => setViewMode('month')}>Month</Button>
+        <Button variant="ghost" size="sm" onClick={() => setCurrentWeek(viewMode === 'week' ? subWeeks(currentWeek, 1) : subMonths(currentWeek, 1))}>← Prev</Button>
+        <span className="font-semibold">{viewMode === 'week' ? `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d, yyyy')}` : format(currentWeek, 'MMMM yyyy')}</span>
+        <Button variant="ghost" size="sm" onClick={() => setCurrentWeek(viewMode === 'week' ? addWeeks(currentWeek, 1) : addMonths(currentWeek, 1))}>Next →</Button>
       </div>
 
       <Tabs defaultValue="schedule">
@@ -120,7 +139,7 @@ export default function DutyRoster() {
 
         <TabsContent value="schedule" className="mt-4">
           <div className="grid gap-3 md:grid-cols-7">
-            {weekDays.map(day => {
+            {(viewMode === 'week' ? weekDays : monthDays).map(day => {
               const dayEntries = entries.filter(e => isSameDay(parseISO(e.date), day));
               const isToday = isSameDay(day, new Date());
               return (
@@ -177,7 +196,7 @@ export default function DutyRoster() {
               <Table>
                 <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Start</TableHead><TableHead>End</TableHead><TableHead>Role</TableHead><TableHead>Notes</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {myShifts.map(s => (
+                  {myShiftPagination.pagedRows.map(s => (
                     <TableRow key={s.id}>
                       <TableCell>{format(parseISO(s.date), 'EEE, MMM d')}</TableCell>
                       <TableCell>{s.shift_start?.slice(0,5)}</TableCell>
@@ -189,6 +208,13 @@ export default function DutyRoster() {
                   {myShifts.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No shifts scheduled</TableCell></TableRow>}
                 </TableBody>
               </Table>
+              <TablePaginationControls
+                page={myShiftPagination.page}
+                totalPages={myShiftPagination.totalPages}
+                rowsPerPage={myShiftPagination.rowsPerPage}
+                onPageChange={myShiftPagination.setPage}
+                onRowsPerPageChange={myShiftPagination.setRowsPerPage}
+              />
             </CardContent>
           </Card>
         </TabsContent>

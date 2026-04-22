@@ -14,6 +14,9 @@ import { useToast } from '@/hooks/use-toast';
 import { UserPlus, LogOut, Users, Settings, Trash2, Plus, Download, Printer, Monitor } from 'lucide-react';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { TablePaginationControls } from '@/components/TablePaginationControls';
+import { getAppSettings } from '@/lib/appSettings';
 
 export default function FrontDesk() {
   const { user, role } = useAuth();
@@ -26,6 +29,9 @@ export default function FrontDesk() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [badgeVisitor, setBadgeVisitor] = useState<any>(null);
   const [form, setForm] = useState<Record<string, string>>({});
+  const [visitorProfiles, setVisitorProfiles] = useState<any[]>([]);
+  const [nameSearch, setNameSearch] = useState('');
+  const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
   const [newField, setNewField] = useState({ field_key: '', field_label: '', field_type: 'text', required: false });
 
   const loadAll = async () => {
@@ -38,6 +44,8 @@ export default function FrontDesk() {
     if (v.data) setVisitors(v.data);
     if (f.data) setFields(f.data);
     if (s.data) setSettings(s.data);
+    const { data: vp } = await (supabase as any).from('visitor_profiles').select('*').order('last_seen_at', { ascending: false }).limit(200);
+    if (vp) setVisitorProfiles(vp);
   };
 
   useEffect(() => {
@@ -58,13 +66,42 @@ export default function FrontDesk() {
     if (!visitor_name.trim()) {
       toast({ title: 'Visitor name required', variant: 'destructive' }); return;
     }
+    const normalizedPhone = (phone || '').replace(/\D/g, '');
+    let profileMatch = visitorProfiles.find(vp =>
+      vp.normalized_name === visitor_name.trim().toLowerCase() &&
+      (
+        !normalizedPhone ||
+        vp.normalized_phone === normalizedPhone ||
+        vp.company?.toLowerCase() === company.toLowerCase()
+      )
+    );
+    if (!profileMatch) {
+      const { data: created } = await (supabase as any).from('visitor_profiles').insert({
+        full_name: visitor_name.trim(),
+        phone,
+        company,
+        extra_fields: extras,
+      }).select().single();
+      profileMatch = created;
+    } else {
+      await (supabase as any).from('visitor_profiles').update({
+        full_name: visitor_name.trim(),
+        phone,
+        company,
+        extra_fields: extras,
+        last_seen_at: new Date().toISOString(),
+      }).eq('id', profileMatch.id);
+    }
     const { data, error } = await supabase.from('visitors').insert({
       visitor_name, company, host_name, purpose, phone,
       extra_fields: extras, checked_in_by: user?.id, source: 'frontdesk',
-    }).select().single();
+      visitor_profile_id: profileMatch?.id,
+      badge_number: profileMatch?.badge_number,
+    } as any).select().single();
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Visitor checked in!' });
     setForm({}); setDialogOpen(false); setBadgeVisitor(data);
+    setNameSearch('');
     syncToSheet(data);
   };
 
@@ -129,6 +166,16 @@ export default function FrontDesk() {
 
   const activeCount = visitors.filter(v => !v.check_out).length;
   const enabledFields = fields.filter(f => f.enabled);
+  const filteredProfiles = visitorProfiles.filter((vp) => vp.full_name?.toLowerCase().includes(nameSearch.toLowerCase())).slice(0, 8);
+  const pagination = useTablePagination(visitors, rowsPerPageDefault);
+
+  useEffect(() => {
+    getAppSettings().then((s) => {
+      setRowsPerPageDefault(s.rows_per_page);
+      pagination.setRowsPerPage(s.rows_per_page);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -153,6 +200,36 @@ export default function FrontDesk() {
             <DialogContent className="max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Check In Visitor</DialogTitle></DialogHeader>
               <div className="space-y-3 mt-2">
+                <div className="space-y-1">
+                  <Label>Quick Search (return visitor)</Label>
+                  <Input
+                    placeholder="Start typing name..."
+                    value={nameSearch}
+                    onChange={(e) => setNameSearch(e.target.value)}
+                  />
+                  {nameSearch && (
+                    <div className="border rounded p-2 space-y-1 max-h-40 overflow-auto">
+                      {filteredProfiles.map((vp) => (
+                        <button
+                          key={vp.id}
+                          className="w-full text-left text-sm hover:bg-muted p-1 rounded"
+                          onClick={() => {
+                            setForm({
+                              ...form,
+                              visitor_name: vp.full_name || '',
+                              company: vp.company || '',
+                              phone: vp.phone || '',
+                            });
+                            setNameSearch(vp.full_name || '');
+                          }}
+                        >
+                          {vp.full_name} {vp.phone ? `• ${vp.phone}` : ''} {vp.company ? `• ${vp.company}` : ''}
+                        </button>
+                      ))}
+                      {filteredProfiles.length === 0 && <p className="text-xs text-muted-foreground">No matching visitor profile</p>}
+                    </div>
+                  )}
+                </div>
                 {enabledFields.map(f => (
                   <div key={f.id} className="space-y-1">
                     <Label>{f.field_label}{f.required && ' *'}</Label>
@@ -189,7 +266,7 @@ export default function FrontDesk() {
               <TableHead>Status</TableHead><TableHead></TableHead>
             </TableRow></TableHeader>
             <TableBody>
-              {visitors.map(v => (
+              {pagination.pagedRows.map(v => (
                 <TableRow key={v.id}>
                   <TableCell className="font-mono text-xs">{v.badge_number}</TableCell>
                   <TableCell className="font-medium">{v.visitor_name}</TableCell>
@@ -211,6 +288,13 @@ export default function FrontDesk() {
               )}
             </TableBody>
           </Table>
+          <TablePaginationControls
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            rowsPerPage={pagination.rowsPerPage}
+            onPageChange={pagination.setPage}
+            onRowsPerPageChange={pagination.setRowsPerPage}
+          />
         </CardContent>
       </Card>
 

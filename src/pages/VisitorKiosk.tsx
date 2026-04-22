@@ -20,11 +20,16 @@ export default function VisitorKiosk() {
   const [pinInput, setPinInput] = useState('');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [checkoutBadge, setCheckoutBadge] = useState('');
+  const [nameSearch, setNameSearch] = useState('');
+  const [visitorProfiles, setVisitorProfiles] = useState<any[]>([]);
 
   useEffect(() => {
     const t = setInterval(() => setCurrentTime(new Date()), 1000);
     supabase.from('visitor_form_fields').select('*').eq('enabled', true).order('display_order').then(({ data }) => {
       if (data) setFields(data);
+    });
+    (supabase as any).from('visitor_profiles').select('*').order('last_seen_at', { ascending: false }).limit(200).then(({ data }: any) => {
+      if (data) setVisitorProfiles(data);
     });
     const { data } = supabase.storage.from('site-assets').getPublicUrl('logo.png');
     fetch(data.publicUrl, { method: 'HEAD' }).then(r => { if (r.ok) setLogoUrl(data.publicUrl); }).catch(() => {});
@@ -35,11 +40,30 @@ export default function VisitorKiosk() {
     const reqMissing = fields.filter(f => f.required && !form[f.field_key]?.trim());
     if (reqMissing.length) { toast({ title: 'Required', description: reqMissing[0].field_label, variant: 'destructive' }); return; }
     const { visitor_name = '', company = '', host_name = '', purpose = '', phone = '', ...extras } = form;
+    const normalizedPhone = (phone || '').replace(/\D/g, '');
+    let profileMatch = visitorProfiles.find(vp =>
+      vp.normalized_name === visitor_name.trim().toLowerCase() &&
+      (!normalizedPhone || vp.normalized_phone === normalizedPhone || vp.company?.toLowerCase() === company.toLowerCase())
+    );
+    if (!profileMatch) {
+      const { data: created } = await (supabase as any).from('visitor_profiles').insert({
+        full_name: visitor_name.trim(), phone, company, extra_fields: extras,
+      }).select().single();
+      profileMatch = created;
+    } else {
+      await (supabase as any).from('visitor_profiles').update({
+        full_name: visitor_name.trim(), phone, company, extra_fields: extras, last_seen_at: new Date().toISOString(),
+      }).eq('id', profileMatch.id);
+    }
+
     const { data, error } = await supabase.from('visitors').insert({
       visitor_name, company, host_name, purpose, phone, extra_fields: extras, source: 'kiosk',
-    }).select().single();
+      visitor_profile_id: profileMatch?.id,
+      badge_number: profileMatch?.badge_number,
+    } as any).select().single();
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
     setSuccess(data); setForm({});
+    setNameSearch('');
     const { data: settings } = await supabase.from('kiosk_settings').select('google_sheet_url').limit(1).maybeSingle();
     if (settings?.google_sheet_url) {
       try {
@@ -128,6 +152,34 @@ export default function VisitorKiosk() {
           <Card className="w-full max-w-xl">
             <CardContent className="pt-6 space-y-4">
               <h2 className="text-2xl font-bold">Welcome — please sign in</h2>
+              <div className="space-y-1">
+                <Label>Search return visitor</Label>
+                <Input value={nameSearch} onChange={(e) => setNameSearch(e.target.value)} placeholder="Type name..." className="h-12 text-lg" />
+                {nameSearch && (
+                  <div className="border rounded p-2 space-y-1 max-h-40 overflow-auto">
+                    {visitorProfiles
+                      .filter((vp) => vp.full_name?.toLowerCase().includes(nameSearch.toLowerCase()))
+                      .slice(0, 8)
+                      .map((vp) => (
+                        <button
+                          key={vp.id}
+                          className="w-full text-left text-sm hover:bg-muted p-1 rounded"
+                          onClick={() => {
+                            setForm({
+                              ...form,
+                              visitor_name: vp.full_name || '',
+                              company: vp.company || '',
+                              phone: vp.phone || '',
+                            });
+                            setNameSearch(vp.full_name || '');
+                          }}
+                        >
+                          {vp.full_name} {vp.phone ? `• ${vp.phone}` : ''} {vp.company ? `• ${vp.company}` : ''}
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
               {fields.map(f => (
                 <div key={f.id} className="space-y-1">
                   <Label className="text-base">{f.field_label}{f.required && ' *'}</Label>

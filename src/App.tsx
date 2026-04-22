@@ -21,6 +21,9 @@ import VisitorKiosk from "./pages/VisitorKiosk";
 import Assets from "./pages/Assets";
 import Books from "./pages/Books";
 import DeviceKiosk from "./pages/DeviceKiosk";
+import Settings from "./pages/Settings";
+import Manual from "./pages/Manual";
+import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -60,6 +63,9 @@ const App = () => (
             <Route path="/front-desk" element={<ProtectedRoute><FrontDesk /></ProtectedRoute>} />
             <Route path="/assets" element={<ProtectedRoute><Assets /></ProtectedRoute>} />
             <Route path="/books" element={<ProtectedRoute><Books /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/manual" element={<ProtectedRoute><Manual /></ProtectedRoute>} />
+            <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
             <Route path="/kiosk" element={<Kiosk />} />
             <Route path="/visitor-kiosk" element={<VisitorKiosk />} />
             <Route path="/device/:tag" element={<DeviceKiosk />} />

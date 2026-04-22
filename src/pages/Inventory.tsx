@@ -15,6 +15,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Plus, Package, ArrowRightLeft, Pencil, Trash2, BarChart3, Layers } from 'lucide-react';
 import { format } from 'date-fns';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { TablePaginationControls } from '@/components/TablePaginationControls';
+import { getAppSettings } from '@/lib/appSettings';
 
 const CHART_COLORS = ['hsl(230,65%,55%)', 'hsl(152,60%,42%)', 'hsl(38,92%,50%)', 'hsl(0,72%,51%)', 'hsl(280,60%,50%)', 'hsl(200,70%,50%)'];
 
@@ -32,7 +35,9 @@ export default function Inventory() {
   const [newItem, setNewItem] = useState({ name: '', description: '', category: '', quantity: 1, location: '', requires_checkout: false });
   const [checkoutQty, setCheckoutQty] = useState(1);
   const [checkoutNotes, setCheckoutNotes] = useState('');
+  const [checkoutLocation, setCheckoutLocation] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
 
   const loadItems = async () => {
     const { data } = await supabase.from('inventory').select('*').order('name');
@@ -68,6 +73,20 @@ export default function Inventory() {
   }, [items]);
 
   const filteredItems = categoryFilter === 'all' ? items : items.filter(i => i.category === categoryFilter);
+  const allItemsPagination = useTablePagination(items, rowsPerPageDefault);
+  const filteredItemsPagination = useTablePagination(filteredItems, rowsPerPageDefault);
+  const checkoutsPagination = useTablePagination(checkouts, rowsPerPageDefault);
+
+  useEffect(() => {
+    getAppSettings().then((s) => {
+      setRowsPerPageDefault(s.rows_per_page);
+      allItemsPagination.setRowsPerPage(s.rows_per_page);
+      filteredItemsPagination.setRowsPerPage(s.rows_per_page);
+      checkoutsPagination.setRowsPerPage(s.rows_per_page);
+      setCheckoutLocation(s.default_checkout_location || '');
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Dashboard data
   const totalItems = items.length;
@@ -110,8 +129,8 @@ export default function Inventory() {
   const checkoutItem = async () => {
     if (!selectedItem || !user) return;
     const { error } = await supabase.from('inventory_checkouts').insert({
-      inventory_item_id: selectedItem.id, user_id: user.id, quantity: checkoutQty, notes: checkoutNotes,
-    });
+      inventory_item_id: selectedItem.id, user_id: user.id, quantity: checkoutQty, notes: checkoutNotes, checkout_location: checkoutLocation,
+    } as any);
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
     await supabase.from('inventory').update({ available_quantity: selectedItem.available_quantity - checkoutQty }).eq('id', selectedItem.id);
     toast({ title: 'Item checked out' }); setCheckoutOpen(false); setSelectedItem(null); setCheckoutQty(1); setCheckoutNotes('');
@@ -152,6 +171,7 @@ export default function Inventory() {
                       <div className="space-y-4 mt-2">
                         <div className="space-y-1"><Label>Quantity (max {item.available_quantity})</Label><Input type="number" min={1} max={item.available_quantity} value={checkoutQty} onChange={e => setCheckoutQty(parseInt(e.target.value) || 1)} /></div>
                         <div className="space-y-1"><Label>Notes</Label><Input value={checkoutNotes} onChange={e => setCheckoutNotes(e.target.value)} /></div>
+                        <div className="space-y-1"><Label>Location</Label><Input value={checkoutLocation} onChange={e => setCheckoutLocation(e.target.value)} placeholder="Where this item is being used" /></div>
                         <Button onClick={checkoutItem} className="w-full">Confirm Check Out</Button>
                       </div>
                     </DialogContent>
@@ -281,7 +301,16 @@ export default function Inventory() {
         <TabsContent value="all" className="mt-4">
           <Card className="border-border/50">
             <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Package className="h-5 w-5" /> All Items ({items.length})</CardTitle></CardHeader>
-            <CardContent>{renderItemsTable(items)}</CardContent>
+            <CardContent>
+              {renderItemsTable(allItemsPagination.pagedRows)}
+              <TablePaginationControls
+                page={allItemsPagination.page}
+                totalPages={allItemsPagination.totalPages}
+                rowsPerPage={allItemsPagination.rowsPerPage}
+                onPageChange={allItemsPagination.setPage}
+                onRowsPerPageChange={allItemsPagination.setRowsPerPage}
+              />
+            </CardContent>
           </Card>
         </TabsContent>
 
@@ -293,7 +322,16 @@ export default function Inventory() {
             ))}
           </div>
           <Card className="border-border/50">
-            <CardContent className="pt-4">{renderItemsTable(filteredItems)}</CardContent>
+            <CardContent className="pt-4">
+              {renderItemsTable(filteredItemsPagination.pagedRows)}
+              <TablePaginationControls
+                page={filteredItemsPagination.page}
+                totalPages={filteredItemsPagination.totalPages}
+                rowsPerPage={filteredItemsPagination.rowsPerPage}
+                onPageChange={filteredItemsPagination.setPage}
+                onRowsPerPageChange={filteredItemsPagination.setRowsPerPage}
+              />
+            </CardContent>
           </Card>
         </TabsContent>
 
@@ -302,21 +340,29 @@ export default function Inventory() {
             <CardHeader><CardTitle className="text-lg flex items-center gap-2"><ArrowRightLeft className="h-5 w-5" /> Active Checkouts ({checkouts.length})</CardTitle></CardHeader>
             <CardContent>
               <Table>
-                <TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Checked Out By</TableHead><TableHead>Qty</TableHead><TableHead>Checked Out At</TableHead><TableHead>Notes</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Checked Out By</TableHead><TableHead>Qty</TableHead><TableHead>Checked Out At</TableHead><TableHead>Location</TableHead><TableHead>Notes</TableHead><TableHead></TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {checkouts.map(c => (
+                  {checkoutsPagination.pagedRows.map(c => (
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">{(c as any).inventory?.name || '—'}</TableCell>
                       <TableCell>{profiles[c.user_id] || '—'}</TableCell>
                       <TableCell>{c.quantity}</TableCell>
                       <TableCell>{format(new Date(c.checked_out_at), 'MMM d, h:mm a')}</TableCell>
+                      <TableCell>{c.checkout_location || '—'}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">{c.notes || '—'}</TableCell>
                       <TableCell><Button size="sm" variant="outline" onClick={() => returnItem(c)}>Return</Button></TableCell>
                     </TableRow>
                   ))}
-                  {checkouts.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No active checkouts</TableCell></TableRow>}
+                  {checkouts.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No active checkouts</TableCell></TableRow>}
                 </TableBody>
               </Table>
+              <TablePaginationControls
+                page={checkoutsPagination.page}
+                totalPages={checkoutsPagination.totalPages}
+                rowsPerPage={checkoutsPagination.rowsPerPage}
+                onPageChange={checkoutsPagination.setPage}
+                onRowsPerPageChange={checkoutsPagination.setRowsPerPage}
+              />
             </CardContent>
           </Card>
         </TabsContent>

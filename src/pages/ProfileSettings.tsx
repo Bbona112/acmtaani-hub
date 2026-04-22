@@ -9,14 +9,16 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { User, Save, Download, Printer, Upload, Hash } from 'lucide-react';
+import { GuidedTour } from '@/components/GuidedTour';
 
 export default function ProfileSettings() {
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile, role, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const qrCanvasRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const staffCardInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ full_name: '', department: '', position: '', phone: '' });
 
   useEffect(() => {
@@ -43,6 +45,25 @@ export default function ProfileSettings() {
     const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
     await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('user_id', user.id);
     toast({ title: 'Photo uploaded!' });
+    await refreshProfile();
+    setUploading(false);
+  };
+
+  const handleStaffCardUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || role !== 'admin') return;
+    setUploading(true);
+    const ext = file.name.split('.').pop();
+    const path = `${user.id}/staff-card.${ext}`;
+    const { error: uploadErr } = await supabase.storage.from('staff-cards').upload(path, file, { upsert: true });
+    if (uploadErr) {
+      toast({ title: 'Upload failed', description: uploadErr.message, variant: 'destructive' });
+      setUploading(false);
+      return;
+    }
+    const { data: { publicUrl } } = supabase.storage.from('staff-cards').getPublicUrl(path);
+    await supabase.from('profiles').update({ staff_card_url: publicUrl } as any).eq('user_id', user.id);
+    toast({ title: 'Staff card uploaded!' });
     await refreshProfile();
     setUploading(false);
   };
@@ -120,6 +141,25 @@ export default function ProfileSettings() {
             <div className="space-y-2"><Label htmlFor="phone">Phone</Label><Input id="phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
             <div className="space-y-2"><Label>Email</Label><Input value={profile?.email || ''} disabled className="bg-muted" /></div>
             <Button onClick={handleSave} disabled={loading}><Save className="h-4 w-4 mr-2" />{loading ? 'Saving...' : 'Save Changes'}</Button>
+            <div className="pt-2">
+              <GuidedTour />
+            </div>
+            <div className="space-y-2 border-t pt-4">
+              <Label>Staff Card</Label>
+              {profile?.staff_card_url ? (
+                <a href={profile.staff_card_url} target="_blank" rel="noreferrer" className="text-sm text-primary underline">View uploaded staff card</a>
+              ) : (
+                <p className="text-xs text-muted-foreground">No staff card uploaded</p>
+              )}
+              {role === 'admin' && (
+                <div>
+                  <input ref={staffCardInputRef} type="file" accept="image/*,.pdf" className="hidden" onChange={handleStaffCardUpload} />
+                  <Button variant="outline" size="sm" onClick={() => staffCardInputRef.current?.click()} disabled={uploading}>
+                    <Upload className="h-3.5 w-3.5 mr-1" /> {uploading ? 'Uploading...' : 'Upload Staff Card'}
+                  </Button>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 

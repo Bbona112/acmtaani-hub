@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
-import { Battery, BatteryCharging, Laptop, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Battery, BatteryCharging, Laptop, CheckCircle2, AlertCircle, MapPin } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { format } from 'date-fns';
 
@@ -12,6 +12,7 @@ export default function DeviceKiosk() {
   const [session, setSession] = useState<any>(null);
   const [battery, setBattery] = useState<{ level: number; charging: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [telemetryState, setTelemetryState] = useState<'connected' | 'unsupported' | 'error'>('connected');
   const [time, setTime] = useState(new Date());
 
   const reportBattery = useCallback(async (assetId: string, level: number, charging: boolean) => {
@@ -52,9 +53,11 @@ export default function DeviceKiosk() {
           return () => clearInterval(interval);
         } catch {
           setError('Battery API not available on this device');
+          setTelemetryState('error');
         }
       } else {
         setError('This browser does not support live battery reporting');
+        setTelemetryState('unsupported');
       }
     };
     init();
@@ -63,8 +66,7 @@ export default function DeviceKiosk() {
     // Realtime session updates
     const ch = supabase.channel(`device-${tag}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'asset_sessions' }, async () => {
-        if (!asset) return;
-        const { data: s } = await supabase.from('asset_sessions').select('*').eq('asset_id', asset.id).is('ended_at', null).maybeSingle();
+        const { data: s } = await supabase.from('asset_sessions').select('*').eq('asset_id', a.id).is('ended_at', null).maybeSingle();
         setSession(s);
       })
       .subscribe();
@@ -102,6 +104,7 @@ export default function DeviceKiosk() {
               <p className="text-sm text-muted-foreground font-mono">{asset.asset_tag}</p>
               <p className="text-2xl font-bold">{asset.name}</p>
               <p className="text-sm text-muted-foreground capitalize">{asset.asset_type}</p>
+              {asset.location && <p className="text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" />{asset.location}</p>}
             </div>
           </div>
 
@@ -119,6 +122,7 @@ export default function DeviceKiosk() {
           )}
 
           {error && <p className="text-xs text-muted-foreground">{error}</p>}
+          {!error && <p className="text-xs text-muted-foreground">Telemetry: {telemetryState}</p>}
 
           <div className="border-t pt-4">
             {session ? (
@@ -136,7 +140,7 @@ export default function DeviceKiosk() {
         </CardContent>
       </Card>
 
-      <p className="text-xs text-muted-foreground mt-6">Battery status reported live to ACMtaani Hub</p>
+      <p className="text-xs text-muted-foreground mt-6">Battery status reported live and translated to simple health indicators in ACMtaani Hub</p>
     </div>
   );
 }

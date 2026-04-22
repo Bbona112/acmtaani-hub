@@ -11,6 +11,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Clock, LogIn, LogOut, Users, BarChart3 } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, isWithinInterval, parseISO } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { useTablePagination } from '@/hooks/useTablePagination';
+import { TablePaginationControls } from '@/components/TablePaginationControls';
+import { getAppSettings } from '@/lib/appSettings';
 
 const CHART_COLORS = ['hsl(230,65%,55%)', 'hsl(152,60%,42%)', 'hsl(38,92%,50%)', 'hsl(0,72%,51%)', 'hsl(280,60%,50%)'];
 
@@ -22,6 +25,7 @@ export default function Attendance() {
   const [activeSession, setActiveSession] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState<string>('all');
+  const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
 
   const loadRecords = async () => {
     if (!user) return;
@@ -110,6 +114,17 @@ export default function Attendance() {
   }, [records]);
 
   const currentlyClockedIn = records.filter(r => !r.clock_out);
+  const individualPagination = useTablePagination(filteredRecords, rowsPerPageDefault);
+  const personalPagination = useTablePagination(records, rowsPerPageDefault);
+
+  useEffect(() => {
+    getAppSettings().then((s) => {
+      setRowsPerPageDefault(s.rows_per_page);
+      individualPagination.setRowsPerPage(s.rows_per_page);
+      personalPagination.setRowsPerPage(s.rows_per_page);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const exportCSV = () => {
     const data = filteredRecords.map(r => ({
@@ -211,7 +226,7 @@ export default function Attendance() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredRecords.slice(0, 50).map(r => (
+                    {individualPagination.pagedRows.map(r => (
                       <TableRow key={r.id}>
                         <TableCell>{profileMap[r.user_id]?.name || '—'}</TableCell>
                         <TableCell>{format(new Date(r.clock_in), 'MMM d, yyyy')}</TableCell>
@@ -224,6 +239,13 @@ export default function Attendance() {
                     {filteredRecords.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No records</TableCell></TableRow>}
                   </TableBody>
                 </Table>
+                <TablePaginationControls
+                  page={individualPagination.page}
+                  totalPages={individualPagination.totalPages}
+                  rowsPerPage={individualPagination.rowsPerPage}
+                  onPageChange={individualPagination.setPage}
+                  onRowsPerPageChange={individualPagination.setRowsPerPage}
+                />
               </CardContent>
             </Card>
           </TabsContent>
@@ -263,7 +285,7 @@ export default function Attendance() {
             <Table>
               <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Clock In</TableHead><TableHead>Clock Out</TableHead><TableHead>Hours</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
               <TableBody>
-                {records.map(r => (
+                {personalPagination.pagedRows.map(r => (
                   <TableRow key={r.id}>
                     <TableCell>{format(new Date(r.clock_in), 'MMM d, yyyy')}</TableCell>
                     <TableCell>{format(new Date(r.clock_in), 'h:mm a')}</TableCell>
@@ -275,6 +297,13 @@ export default function Attendance() {
                 {records.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No records yet</TableCell></TableRow>}
               </TableBody>
             </Table>
+              <TablePaginationControls
+                page={personalPagination.page}
+                totalPages={personalPagination.totalPages}
+                rowsPerPage={personalPagination.rowsPerPage}
+                onPageChange={personalPagination.setPage}
+                onRowsPerPageChange={personalPagination.setRowsPerPage}
+              />
           </CardContent>
         </Card>
       )}
