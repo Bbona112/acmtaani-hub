@@ -69,6 +69,16 @@ export default function Settings() {
     setFields((prev) => prev.map((f) => (f.id === id ? { ...f, [key]: value } : f)));
   };
 
+  const runReset = async (fnName: "reset_asset_tag_numbering" | "reset_inventory_asset_id_numbering" | "reset_front_desk_data", confirmText: string) => {
+    if (!confirm(confirmText)) return;
+    const { error } = await (supabase as any).rpc(fnName);
+    if (error) {
+      toast({ title: "Reset failed", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Reset complete" });
+  };
+
   if (loading) return <p className="text-muted-foreground">Loading settings...</p>;
   if (role !== "admin") return <p className="text-muted-foreground">Only admins can access settings.</p>;
 
@@ -132,6 +142,32 @@ export default function Settings() {
           <div className="flex items-center justify-between"><Label>Enable Guided Tour</Label><Switch checked={form.enable_guided_tour} onCheckedChange={(v) => setForm({ ...form, enable_guided_tour: v })} /></div>
           <div className="flex items-center justify-between"><Label>Enable Manual Page</Label><Switch checked={form.enable_manual_page} onCheckedChange={(v) => setForm({ ...form, enable_manual_page: v })} /></div>
           <div className="flex items-center justify-between"><Label>Enable Advanced Analytics</Label><Switch checked={form.enable_advanced_analytics} onCheckedChange={(v) => setForm({ ...form, enable_advanced_analytics: v })} /></div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Admin Reset Tools</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <Button
+            variant="outline"
+            className="w-full justify-start"
+            onClick={() => runReset("reset_asset_tag_numbering", "Reset and re-number all asset tags?")}
+          >
+            Reset Asset Tag Numbering
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full justify-start"
+            onClick={() => runReset("reset_inventory_asset_id_numbering", "Reset and re-number all inventory Asset IDs?")}
+          >
+            Reset Inventory Asset ID Numbering
+          </Button>
+          <Button
+            variant="destructive"
+            className="w-full justify-start"
+            onClick={() => runReset("reset_front_desk_data", "Delete all front-desk visitor data and reset badges?")}
+          >
+            Reset Front Desk Data
+          </Button>
         </CardContent>
       </Card>
       <Button onClick={save}>Save Settings</Button>

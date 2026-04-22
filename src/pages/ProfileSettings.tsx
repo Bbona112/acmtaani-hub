@@ -55,13 +55,31 @@ export default function ProfileSettings() {
     setUploading(true);
     const ext = file.name.split('.').pop();
     const path = `${user.id}/staff-card.${ext}`;
-    const { error: uploadErr } = await supabase.storage.from('staff-cards').upload(path, file, { upsert: true });
+    let bucket = 'staff-cards';
+    let { error: uploadErr } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
+
+    if (uploadErr?.message?.toLowerCase().includes('bucket not found')) {
+      // Fallback for environments where staff-cards bucket migration has not been applied yet.
+      bucket = 'site-assets';
+      const fallbackPath = `staff-cards/${path}`;
+      const fallback = await supabase.storage.from(bucket).upload(fallbackPath, file, { upsert: true });
+      uploadErr = fallback.error || null;
+      if (!uploadErr) {
+        const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(fallbackPath);
+        await supabase.from('profiles').update({ staff_card_url: publicUrl } as any).eq('user_id', user.id);
+        toast({ title: 'Staff card uploaded', description: 'Using fallback storage bucket until staff-cards bucket is available.' });
+        await refreshProfile();
+        setUploading(false);
+        return;
+      }
+    }
+
     if (uploadErr) {
       toast({ title: 'Upload failed', description: uploadErr.message, variant: 'destructive' });
       setUploading(false);
       return;
     }
-    const { data: { publicUrl } } = supabase.storage.from('staff-cards').getPublicUrl(path);
+    const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(path);
     await supabase.from('profiles').update({ staff_card_url: publicUrl } as any).eq('user_id', user.id);
     toast({ title: 'Staff card uploaded!' });
     await refreshProfile();

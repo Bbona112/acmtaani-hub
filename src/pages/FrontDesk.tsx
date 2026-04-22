@@ -31,6 +31,7 @@ export default function FrontDesk() {
   const [form, setForm] = useState<Record<string, string>>({});
   const [visitorProfiles, setVisitorProfiles] = useState<any[]>([]);
   const [nameSearch, setNameSearch] = useState('');
+  const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
   const [newField, setNewField] = useState({ field_key: '', field_label: '', field_type: 'text', required: false });
 
@@ -44,9 +45,31 @@ export default function FrontDesk() {
     if (v.data) setVisitors(v.data);
     if (f.data) setFields(f.data);
     if (s.data) setSettings(s.data);
-    const { data: vp } = await (supabase as any).from('visitor_profiles').select('*').order('last_seen_at', { ascending: false }).limit(200);
+    const { data: vp } = await (supabase as any).from('visitor_profiles').select('*').order('last_seen_at', { ascending: false }).limit(30);
     if (vp) setVisitorProfiles(vp);
   };
+
+  useEffect(() => {
+    const query = nameSearch.trim();
+    if (query.length < 2) {
+      if (!query) {
+        (supabase as any).from('visitor_profiles').select('*').order('last_seen_at', { ascending: false }).limit(30).then(({ data }: any) => {
+          if (data) setVisitorProfiles(data);
+        });
+      }
+      return;
+    }
+    const timer = setTimeout(async () => {
+      const { data } = await (supabase as any)
+        .from('visitor_profiles')
+        .select('*')
+        .or(`full_name.ilike.%${query}%,company.ilike.%${query}%,phone.ilike.%${query}%`)
+        .order('last_seen_at', { ascending: false })
+        .limit(20);
+      if (data) setVisitorProfiles(data);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [nameSearch]);
 
   useEffect(() => {
     loadAll();
@@ -67,13 +90,9 @@ export default function FrontDesk() {
       toast({ title: 'Visitor name required', variant: 'destructive' }); return;
     }
     const normalizedPhone = (phone || '').replace(/\D/g, '');
-    let profileMatch = visitorProfiles.find(vp =>
+    let profileMatch = selectedProfile || visitorProfiles.find(vp =>
       vp.normalized_name === visitor_name.trim().toLowerCase() &&
-      (
-        !normalizedPhone ||
-        vp.normalized_phone === normalizedPhone ||
-        vp.company?.toLowerCase() === company.toLowerCase()
-      )
+      (!normalizedPhone || vp.normalized_phone === normalizedPhone || vp.company?.toLowerCase() === company.toLowerCase())
     );
     if (!profileMatch) {
       const { data: created } = await (supabase as any).from('visitor_profiles').insert({
@@ -102,6 +121,7 @@ export default function FrontDesk() {
     toast({ title: 'Visitor checked in!' });
     setForm({}); setDialogOpen(false); setBadgeVisitor(data);
     setNameSearch('');
+    setSelectedProfile(null);
     syncToSheet(data);
   };
 
@@ -168,7 +188,7 @@ export default function FrontDesk() {
 
   const activeCount = visitors.filter(v => !v.check_out).length;
   const enabledFields = fields.filter(f => f.enabled);
-  const filteredProfiles = visitorProfiles.filter((vp) => vp.full_name?.toLowerCase().includes(nameSearch.toLowerCase())).slice(0, 8);
+  const filteredProfiles = visitorProfiles.slice(0, 8);
   const pagination = useTablePagination(visitors, rowsPerPageDefault);
 
   useEffect(() => {
@@ -205,7 +225,7 @@ export default function FrontDesk() {
                 <div className="space-y-1">
                   <Label>Quick Search (return visitor)</Label>
                   <Input
-                    placeholder="Start typing name..."
+                    placeholder="Search by name, phone, or company..."
                     value={nameSearch}
                     onChange={(e) => setNameSearch(e.target.value)}
                   />
@@ -223,6 +243,7 @@ export default function FrontDesk() {
                               phone: vp.phone || '',
                             });
                             setNameSearch(vp.full_name || '');
+                            setSelectedProfile(vp);
                           }}
                         >
                           {vp.full_name} {vp.phone ? `• ${vp.phone}` : ''} {vp.company ? `• ${vp.company}` : ''}
