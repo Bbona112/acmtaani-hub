@@ -35,7 +35,6 @@ export default function Inventory() {
   const [newItem, setNewItem] = useState({ name: '', description: '', category: '', quantity: 1, location: '', requires_checkout: false });
   const [checkoutQty, setCheckoutQty] = useState(1);
   const [checkoutNotes, setCheckoutNotes] = useState('');
-  const [checkoutLocation, setCheckoutLocation] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
 
@@ -83,7 +82,6 @@ export default function Inventory() {
       allItemsPagination.setRowsPerPage(s.rows_per_page);
       filteredItemsPagination.setRowsPerPage(s.rows_per_page);
       checkoutsPagination.setRowsPerPage(s.rows_per_page);
-      setCheckoutLocation(s.default_checkout_location || '');
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -128,30 +126,12 @@ export default function Inventory() {
 
   const checkoutItem = async () => {
     if (!selectedItem || !user) return;
-    let { error } = await supabase.from('inventory_checkouts').insert({
-      inventory_item_id: selectedItem.id, user_id: user.id, quantity: checkoutQty, notes: checkoutNotes, checkout_location: checkoutLocation,
-    } as any);
-    if (error?.message?.includes("Could not find the 'checkout_location' column")) {
-      // Backward-compatible fallback while database migration is pending.
-      const retry = await supabase.from('inventory_checkouts').insert({
-        inventory_item_id: selectedItem.id,
-        user_id: user.id,
-        quantity: checkoutQty,
-        notes: checkoutNotes,
-      });
-      error = retry.error;
-      if (!error) {
-        toast({
-          title: 'Item checked out',
-          description: 'Checkout succeeded, but location will start saving after the latest DB migration is applied.',
-        });
-      }
-    }
+    const { error } = await supabase.from('inventory_checkouts').insert({
+      inventory_item_id: selectedItem.id, user_id: user.id, quantity: checkoutQty, notes: checkoutNotes,
+    });
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
     await supabase.from('inventory').update({ available_quantity: selectedItem.available_quantity - checkoutQty }).eq('id', selectedItem.id);
-    if (!error?.message?.includes("Could not find the 'checkout_location' column")) {
-      toast({ title: 'Item checked out' });
-    }
+    toast({ title: 'Item checked out' });
     setCheckoutOpen(false); setSelectedItem(null); setCheckoutQty(1); setCheckoutNotes('');
   };
 
@@ -190,7 +170,6 @@ export default function Inventory() {
                       <div className="space-y-4 mt-2">
                         <div className="space-y-1"><Label>Quantity (max {item.available_quantity})</Label><Input type="number" min={1} max={item.available_quantity} value={checkoutQty} onChange={e => setCheckoutQty(parseInt(e.target.value) || 1)} /></div>
                         <div className="space-y-1"><Label>Notes</Label><Input value={checkoutNotes} onChange={e => setCheckoutNotes(e.target.value)} /></div>
-                        <div className="space-y-1"><Label>Location</Label><Input value={checkoutLocation} onChange={e => setCheckoutLocation(e.target.value)} placeholder="Where this item is being used" /></div>
                         <Button onClick={checkoutItem} className="w-full">Confirm Check Out</Button>
                       </div>
                     </DialogContent>
@@ -359,7 +338,7 @@ export default function Inventory() {
             <CardHeader><CardTitle className="text-lg flex items-center gap-2"><ArrowRightLeft className="h-5 w-5" /> Active Checkouts ({checkouts.length})</CardTitle></CardHeader>
             <CardContent>
               <Table>
-                <TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Checked Out By</TableHead><TableHead>Qty</TableHead><TableHead>Checked Out At</TableHead><TableHead>Location</TableHead><TableHead>Notes</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                <TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Checked Out By</TableHead><TableHead>Qty</TableHead><TableHead>Checked Out At</TableHead><TableHead>Notes</TableHead><TableHead></TableHead></TableRow></TableHeader>
                 <TableBody>
                   {checkoutsPagination.pagedRows.map(c => (
                     <TableRow key={c.id}>
@@ -367,12 +346,11 @@ export default function Inventory() {
                       <TableCell>{profiles[c.user_id] || '—'}</TableCell>
                       <TableCell>{c.quantity}</TableCell>
                       <TableCell>{format(new Date(c.checked_out_at), 'MMM d, h:mm a')}</TableCell>
-                      <TableCell>{c.checkout_location || '—'}</TableCell>
                       <TableCell className="text-muted-foreground text-sm">{c.notes || '—'}</TableCell>
                       <TableCell><Button size="sm" variant="outline" onClick={() => returnItem(c)}>Return</Button></TableCell>
                     </TableRow>
                   ))}
-                  {checkouts.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No active checkouts</TableCell></TableRow>}
+                  {checkouts.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No active checkouts</TableCell></TableRow>}
                 </TableBody>
               </Table>
               <TablePaginationControls
