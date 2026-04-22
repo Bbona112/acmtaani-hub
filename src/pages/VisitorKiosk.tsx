@@ -72,7 +72,9 @@ export default function VisitorKiosk() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...data, kind: 'check_in' }),
         });
-      } catch {}
+      } catch {
+        // optional webhook sync
+      }
     }
     setTimeout(() => { setSuccess(null); setMode('idle'); }, 8000);
   };

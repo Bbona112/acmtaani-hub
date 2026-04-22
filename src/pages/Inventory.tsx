@@ -128,12 +128,31 @@ export default function Inventory() {
 
   const checkoutItem = async () => {
     if (!selectedItem || !user) return;
-    const { error } = await supabase.from('inventory_checkouts').insert({
+    let { error } = await supabase.from('inventory_checkouts').insert({
       inventory_item_id: selectedItem.id, user_id: user.id, quantity: checkoutQty, notes: checkoutNotes, checkout_location: checkoutLocation,
     } as any);
+    if (error?.message?.includes("Could not find the 'checkout_location' column")) {
+      // Backward-compatible fallback while database migration is pending.
+      const retry = await supabase.from('inventory_checkouts').insert({
+        inventory_item_id: selectedItem.id,
+        user_id: user.id,
+        quantity: checkoutQty,
+        notes: checkoutNotes,
+      });
+      error = retry.error;
+      if (!error) {
+        toast({
+          title: 'Item checked out',
+          description: 'Checkout succeeded, but location will start saving after the latest DB migration is applied.',
+        });
+      }
+    }
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
     await supabase.from('inventory').update({ available_quantity: selectedItem.available_quantity - checkoutQty }).eq('id', selectedItem.id);
-    toast({ title: 'Item checked out' }); setCheckoutOpen(false); setSelectedItem(null); setCheckoutQty(1); setCheckoutNotes('');
+    if (!error?.message?.includes("Could not find the 'checkout_location' column")) {
+      toast({ title: 'Item checked out' });
+    }
+    setCheckoutOpen(false); setSelectedItem(null); setCheckoutQty(1); setCheckoutNotes('');
   };
 
   const returnItem = async (checkout: any) => {

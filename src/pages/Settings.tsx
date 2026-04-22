@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default function Settings() {
   const { role, user } = useAuth();
@@ -21,6 +22,8 @@ export default function Settings() {
     enable_advanced_analytics: true,
     default_checkout_location: "",
   });
+  const [kiosk, setKiosk] = useState({ id: "", exit_pin: "1234", google_sheet_url: "" });
+  const [fields, setFields] = useState<any[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -36,6 +39,10 @@ export default function Settings() {
           default_checkout_location: data.default_checkout_location ?? "",
         });
       }
+      const { data: kioskData } = await supabase.from("kiosk_settings").select("*").limit(1).maybeSingle();
+      if (kioskData) setKiosk({ id: kioskData.id, exit_pin: kioskData.exit_pin, google_sheet_url: kioskData.google_sheet_url || "" });
+      const { data: formFields } = await supabase.from("visitor_form_fields").select("*").order("display_order");
+      if (formFields) setFields(formFields);
       setLoading(false);
     })();
   }, []);
@@ -49,7 +56,17 @@ export default function Settings() {
       const { data } = await (supabase as any).from("app_settings").insert(payload).select().single();
       if (data?.id) setSettingsId(data.id);
     }
+    await supabase.from("kiosk_settings").update({
+      exit_pin: kiosk.exit_pin,
+      google_sheet_url: kiosk.google_sheet_url,
+      updated_by: user?.id,
+    }).eq("id", kiosk.id);
     toast({ title: "Settings saved" });
+  };
+
+  const toggleField = async (id: string, key: "enabled" | "required", value: boolean) => {
+    await supabase.from("visitor_form_fields").update({ [key]: value } as any).eq("id", id);
+    setFields((prev) => prev.map((f) => (f.id === id ? { ...f, [key]: value } : f)));
   };
 
   if (loading) return <p className="text-muted-foreground">Loading settings...</p>;
@@ -76,6 +93,37 @@ export default function Settings() {
             <Label>Default Checkout Location</Label>
             <Input value={form.default_checkout_location} onChange={(e) => setForm({ ...form, default_checkout_location: e.target.value })} />
           </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>Kiosk and Visitor Intake</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Kiosk Exit PIN</Label>
+            <Input value={kiosk.exit_pin} onChange={(e) => setKiosk({ ...kiosk, exit_pin: e.target.value })} />
+          </div>
+          <div className="space-y-2">
+            <Label>Google Sheet Webhook URL</Label>
+            <Input value={kiosk.google_sheet_url} onChange={(e) => setKiosk({ ...kiosk, google_sheet_url: e.target.value })} />
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Field</TableHead>
+                <TableHead>Required</TableHead>
+                <TableHead>Enabled</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {fields.map((field) => (
+                <TableRow key={field.id}>
+                  <TableCell>{field.field_label}</TableCell>
+                  <TableCell><Switch checked={field.required} onCheckedChange={(v) => toggleField(field.id, "required", v)} /></TableCell>
+                  <TableCell><Switch checked={field.enabled} onCheckedChange={(v) => toggleField(field.id, "enabled", v)} /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
       <Card>

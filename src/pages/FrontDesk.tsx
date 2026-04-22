@@ -118,7 +118,9 @@ export default function FrontDesk() {
           phone: visitor.phone, check_in: visitor.check_in,
         }),
       });
-    } catch {}
+    } catch {
+      // optional webhook sync
+    }
   };
 
   const checkOut = async (id: string) => {
