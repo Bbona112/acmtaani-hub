@@ -3,6 +3,7 @@ import { LayoutDashboard, Users, Clock, ListTodo, LogOut, Settings, Monitor, Pac
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, useSidebar,
@@ -33,6 +34,8 @@ const navItems = [
   { title: 'Master Settings', url: '/settings', icon: Settings, adminOnly: true },
 ];
 
+type AppSettingsRow = Database['public']['Tables']['app_settings']['Row'] & { volunteer_admin_modules?: string[] };
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
@@ -41,11 +44,19 @@ export function AppSidebar() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoDialogOpen, setLogoDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [volunteerModules, setVolunteerModules] = useState<string[]>([]);
 
   useEffect(() => {
     const { data } = supabase.storage.from('site-assets').getPublicUrl('logo.png');
     fetch(data.publicUrl, { method: 'HEAD' }).then(r => { if (r.ok) setLogoUrl(data.publicUrl + '?t=' + Date.now()); }).catch(() => {});
+    supabase.from('app_settings').select('*').limit(1).maybeSingle().then(({ data: s }) => {
+      const row = s as AppSettingsRow | null;
+      const mods = row?.volunteer_admin_modules;
+      setVolunteerModules(Array.isArray(mods) ? mods : []);
+    });
   }, []);
+
+  const can = (moduleKey: string) => role === 'admin' || (role === 'volunteer' && volunteerModules.includes(moduleKey));
 
   const uploadLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -78,7 +89,7 @@ export function AppSidebar() {
                   </div>
                 )}
                 <span className="font-semibold text-foreground text-sm">ACMtaani Hub</span>
-                {role === 'admin' && (
+                {can('master_settings') && (
                   <Button variant="ghost" size="sm" className="h-5 w-5 p-0 ml-auto" onClick={() => setLogoDialogOpen(true)}>
                     <Upload className="h-3 w-3" />
                   </Button>
@@ -88,7 +99,7 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent className="mt-2">
             <SidebarMenu>
-              {navItems.filter(item => !item.adminOnly || role === 'admin').map(item => (
+              {navItems.filter(item => !item.adminOnly || can('master_settings')).map(item => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink to={item.url} end={item.url === '/'} className="hover:bg-sidebar-accent/50" activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">

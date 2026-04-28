@@ -11,10 +11,12 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { Search, Mail, Phone, Building, Shield, Pencil, Hash } from 'lucide-react';
+import type { Database } from '@/integrations/supabase/types';
 
 export default function Directory() {
   const { role } = useAuth();
   const { toast } = useToast();
+  const [volunteerModules, setVolunteerModules] = useState<string[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [roles, setRoles] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
@@ -22,15 +24,17 @@ export default function Directory() {
   const [editProfile, setEditProfile] = useState<any>(null);
   const [editRole, setEditRole] = useState('');
 
+  const canDirectoryAdmin = role === 'admin' || (role === 'volunteer' && volunteerModules.includes('directory_admin'));
+
   const load = async () => {
     // For admins: full profile data (admin RLS allows). For others: safe directory view.
-    if (role === 'admin') {
+    if (canDirectoryAdmin) {
       const { data } = await supabase.from('profiles').select('*').order('full_name');
       if (data) setProfiles(data);
       const { data: r } = await supabase.from('user_roles').select('user_id, role');
       if (r) {
         const m: Record<string, string> = {};
-        r.forEach((x: any) => { m[x.user_id] = x.role; });
+        r.forEach((x: { user_id: string; role: string }) => { m[x.user_id] = x.role; });
         setRoles(m);
       }
     } else {
@@ -39,7 +43,14 @@ export default function Directory() {
     }
   };
 
-  useEffect(() => { load(); }, [role]);
+  useEffect(() => {
+    supabase.from('app_settings').select('volunteer_admin_modules').limit(1).maybeSingle().then(({ data }) => {
+      const row = data as (Pick<Database['public']['Tables']['app_settings']['Row'], 'volunteer_admin_modules'> & { volunteer_admin_modules?: string[] }) | null;
+      setVolunteerModules(Array.isArray(row?.volunteer_admin_modules) ? row!.volunteer_admin_modules! : []);
+    });
+  }, []);
+
+  useEffect(() => { load(); }, [role, volunteerModules.join('|')]);
 
   const filtered = profiles.filter((p) =>
     [p.full_name, p.email, p.department, p.position, p.employee_id].some((f) =>
@@ -129,7 +140,7 @@ export default function Directory() {
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
                       <p className="font-semibold truncate">{p.full_name || 'Unnamed'}</p>
-                      {role === 'admin' && (
+                      {canDirectoryAdmin && (
                         <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => startEdit(p)}><Pencil className="h-3 w-3" /></Button>
                       )}
                     </div>
@@ -146,7 +157,7 @@ export default function Directory() {
                     {p.phone && (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground"><Phone className="h-3 w-3" /> {p.phone}</div>
                     )}
-                    {role === 'admin' && userRole && (
+                    {canDirectoryAdmin && userRole && (
                       <Badge variant="outline" className="text-xs mt-1"><Shield className="h-3 w-3 mr-1" /> {userRole}</Badge>
                     )}
                   </div>

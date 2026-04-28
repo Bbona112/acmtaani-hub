@@ -18,12 +18,14 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis
 import { useTablePagination } from '@/hooks/useTablePagination';
 import { TablePaginationControls } from '@/components/TablePaginationControls';
 import { getAppSettings } from '@/lib/appSettings';
+import type { Database } from '@/integrations/supabase/types';
 
 const CHART_COLORS = ['hsl(230,65%,55%)', 'hsl(152,60%,42%)', 'hsl(38,92%,50%)', 'hsl(0,72%,51%)', 'hsl(280,60%,50%)', 'hsl(200,70%,50%)'];
 
 export default function Inventory() {
   const { user, role } = useAuth();
   const { toast } = useToast();
+  const [volunteerModules, setVolunteerModules] = useState<string[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [checkouts, setCheckouts] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
@@ -37,6 +39,8 @@ export default function Inventory() {
   const [checkoutNotes, setCheckoutNotes] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
+
+  const canInventoryAdmin = role === 'admin' || (role === 'volunteer' && volunteerModules.includes('inventory_admin'));
 
   const loadItems = async () => {
     const { data } = await supabase.from('inventory').select('*').order('name');
@@ -59,6 +63,10 @@ export default function Inventory() {
 
   useEffect(() => {
     loadItems(); loadCheckouts(); loadProfiles();
+    supabase.from('app_settings').select('volunteer_admin_modules').limit(1).maybeSingle().then(({ data }) => {
+      const row = data as (Pick<Database['public']['Tables']['app_settings']['Row'], 'volunteer_admin_modules'> & { volunteer_admin_modules?: string[] }) | null;
+      setVolunteerModules(Array.isArray(row?.volunteer_admin_modules) ? row!.volunteer_admin_modules! : []);
+    });
     const channel = supabase.channel('inventory-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory' }, () => loadItems())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'inventory_checkouts' }, () => loadCheckouts())
@@ -175,7 +183,7 @@ export default function Inventory() {
                     </DialogContent>
                   </Dialog>
                 )}
-                {role === 'admin' && (
+                {canInventoryAdmin && (
                   <>
                     <Button size="sm" variant="ghost" onClick={() => { setEditItem({ ...item }); setEditOpen(true); }}><Pencil className="h-3.5 w-3.5" /></Button>
                     <Button size="sm" variant="ghost" className="text-destructive" onClick={() => deleteItem(item.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
@@ -197,7 +205,7 @@ export default function Inventory() {
           <h1 className="text-2xl font-bold">Inventory</h1>
           <p className="text-muted-foreground mt-1">Track items and manage check-outs</p>
         </div>
-        {role === 'admin' && (
+        {canInventoryAdmin && (
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" /> Add Item</Button></DialogTrigger>
             <DialogContent>

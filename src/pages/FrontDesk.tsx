@@ -11,29 +11,52 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, LogOut, Users, Settings, Trash2, Plus, Download, Printer, Monitor } from 'lucide-react';
+import { UserPlus, LogOut, Users, Settings, Trash2, Plus, Download, Printer, Monitor, ExternalLink, QrCode, Upload } from 'lucide-react';
 import { format } from 'date-fns';
 import { Link } from 'react-router-dom';
 import { useTablePagination } from '@/hooks/useTablePagination';
 import { TablePaginationControls } from '@/components/TablePaginationControls';
 import { getAppSettings } from '@/lib/appSettings';
+import { QRCodeCanvas } from 'qrcode.react';
+import type { Database } from '@/integrations/supabase/types';
+
+type VisitorRow = Database['public']['Tables']['visitors']['Row'];
+type VisitorFieldRow = Database['public']['Tables']['visitor_form_fields']['Row'];
+type KioskSettingsRow = Database['public']['Tables']['kiosk_settings']['Row'];
+type AppSettingsRow = Database['public']['Tables']['app_settings']['Row'] & {
+  ms_form_url?: string;
+  ms_forms_mapping?: Record<string, string>;
+  volunteer_admin_modules?: string[];
+};
 
 export default function FrontDesk() {
   const { user, role } = useAuth();
   const { toast } = useToast();
-  const [visitors, setVisitors] = useState<any[]>([]);
-  const [fields, setFields] = useState<any[]>([]);
-  const [settings, setSettings] = useState<any>(null);
+  const [visitors, setVisitors] = useState<VisitorRow[]>([]);
+  const [fields, setFields] = useState<VisitorFieldRow[]>([]);
+  const [settings, setSettings] = useState<KioskSettingsRow | null>(null);
+  const [app, setApp] = useState<AppSettingsRow | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [badgeVisitor, setBadgeVisitor] = useState<any>(null);
+  const [formLinkOpen, setFormLinkOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [badgeVisitor, setBadgeVisitor] = useState<VisitorRow | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
-  const [visitorProfiles, setVisitorProfiles] = useState<any[]>([]);
-  const [nameSearch, setNameSearch] = useState('');
-  const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
   const [newField, setNewField] = useState({ field_key: '', field_label: '', field_type: 'text', required: false });
+  const [importText, setImportText] = useState('');
+  const [importHeaders, setImportHeaders] = useState<string[]>([]);
+  const [importMapping, setImportMapping] = useState<Record<string, string>>({
+    check_in: '',
+    visitor_name: '',
+    company: '',
+    host_name: '',
+    purpose: '',
+    phone: '',
+  });
+
+  const canFrontDeskAdminTools = role === 'admin' || (role === 'volunteer' && (app?.volunteer_admin_modules || []).includes('frontdesk_admin_tools'));
 
   const loadAll = async () => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -45,31 +68,15 @@ export default function FrontDesk() {
     if (v.data) setVisitors(v.data);
     if (f.data) setFields(f.data);
     if (s.data) setSettings(s.data);
-    const { data: vp } = await (supabase as any).from('visitor_profiles').select('*').order('last_seen_at', { ascending: false }).limit(30);
-    if (vp) setVisitorProfiles(vp);
-  };
-
-  useEffect(() => {
-    const query = nameSearch.trim();
-    if (query.length < 2) {
-      if (!query) {
-        (supabase as any).from('visitor_profiles').select('*').order('last_seen_at', { ascending: false }).limit(30).then(({ data }: any) => {
-          if (data) setVisitorProfiles(data);
-        });
+    const { data: appSettings } = await supabase.from('app_settings').select('*').limit(1).maybeSingle();
+    if (appSettings) {
+      const row = appSettings as AppSettingsRow;
+      setApp(row);
+      if (row?.ms_forms_mapping && typeof row.ms_forms_mapping === 'object') {
+        setImportMapping((prev) => ({ ...prev, ...(row.ms_forms_mapping || {}) }));
       }
-      return;
     }
-    const timer = setTimeout(async () => {
-      const { data } = await (supabase as any)
-        .from('visitor_profiles')
-        .select('*')
-        .or(`full_name.ilike.%${query}%,company.ilike.%${query}%,phone.ilike.%${query}%`)
-        .order('last_seen_at', { ascending: false })
-        .limit(20);
-      if (data) setVisitorProfiles(data);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [nameSearch]);
+  };
 
   useEffect(() => {
     loadAll();
@@ -89,43 +96,17 @@ export default function FrontDesk() {
     if (!visitor_name.trim()) {
       toast({ title: 'Visitor name required', variant: 'destructive' }); return;
     }
-    const normalizedPhone = (phone || '').replace(/\D/g, '');
-    let profileMatch = selectedProfile || visitorProfiles.find(vp =>
-      vp.normalized_name === visitor_name.trim().toLowerCase() &&
-      (!normalizedPhone || vp.normalized_phone === normalizedPhone || vp.company?.toLowerCase() === company.toLowerCase())
-    );
-    if (!profileMatch) {
-      const { data: created } = await (supabase as any).from('visitor_profiles').insert({
-        full_name: visitor_name.trim(),
-        phone,
-        company,
-        extra_fields: extras,
-      }).select().single();
-      profileMatch = created;
-    } else {
-      await (supabase as any).from('visitor_profiles').update({
-        full_name: visitor_name.trim(),
-        phone,
-        company,
-        extra_fields: extras,
-        last_seen_at: new Date().toISOString(),
-      }).eq('id', profileMatch.id);
-    }
     const { data, error } = await supabase.from('visitors').insert({
       visitor_name, company, host_name, purpose, phone,
       extra_fields: extras, checked_in_by: user?.id, source: 'frontdesk',
-      visitor_profile_id: profileMatch?.id,
-      badge_number: profileMatch?.badge_number,
-    } as any).select().single();
+    }).select().single();
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Visitor checked in!' });
     setForm({}); setDialogOpen(false); setBadgeVisitor(data);
-    setNameSearch('');
-    setSelectedProfile(null);
     syncToSheet(data);
   };
 
-  const syncToSheet = async (visitor: any) => {
+  const syncToSheet = async (visitor: VisitorRow) => {
     if (!settings?.google_sheet_url) return;
     try {
       await fetch(settings.google_sheet_url, {
@@ -186,9 +167,116 @@ export default function FrontDesk() {
     toast({ title: 'Saved' }); setSettingsOpen(false); loadAll();
   };
 
+  const parseCsv = (csv: string): { headers: string[]; rows: Record<string, string>[] } => {
+    const lines = csv.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter((l) => l.trim().length > 0);
+    if (lines.length === 0) return { headers: [], rows: [] };
+
+    const parseLine = (line: string) => {
+      const out: string[] = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; continue; }
+          inQuotes = !inQuotes;
+          continue;
+        }
+        if (ch === ',' && !inQuotes) { out.push(cur); cur = ''; continue; }
+        cur += ch;
+      }
+      out.push(cur);
+      return out.map((s) => s.trim());
+    };
+
+    const headers = parseLine(lines[0]);
+    const rows = lines.slice(1).map((l) => {
+      const cells = parseLine(l);
+      const obj: Record<string, string> = {};
+      headers.forEach((h, idx) => { obj[h] = cells[idx] ?? ''; });
+      return obj;
+    });
+    return { headers, rows };
+  };
+
+  const inferMapping = (headers: string[]) => {
+    const pick = (candidates: string[]) => headers.find((h) => candidates.some((c) => h.toLowerCase() === c.toLowerCase())) || '';
+    setImportMapping((m) => ({
+      ...m,
+      check_in: m.check_in || pick(['Completion time', 'Submit time', 'Timestamp', 'Date']),
+      visitor_name: m.visitor_name || pick(['Name', 'Full Name', 'Visitor Name', 'visitor_name']),
+      company: m.company || pick(['Company', 'Organization', 'Organisation']),
+      host_name: m.host_name || pick(['Host', 'Host Name']),
+      purpose: m.purpose || pick(['Purpose', 'Reason for visit']),
+      phone: m.phone || pick(['Phone', 'Phone Number', 'Mobile']),
+    }));
+  };
+
+  const applyImportText = (text: string) => {
+    setImportText(text);
+    const parsed = parseCsv(text);
+    setImportHeaders(parsed.headers);
+    if (parsed.headers.length) inferMapping(parsed.headers);
+  };
+
+  const saveMappingToSettings = async (mapping: Record<string, string>) => {
+    if (role !== 'admin') return;
+    if (!app?.id) return;
+    await supabase.from('app_settings').update({ ms_forms_mapping: mapping, updated_by: user?.id } as never).eq('id', app.id);
+  };
+
+  const importFromMsFormsCsv = async () => {
+    if (!user) return;
+    const { headers, rows } = parseCsv(importText);
+    if (headers.length === 0 || rows.length === 0) {
+      toast({ title: 'No rows to import', variant: 'destructive' });
+      return;
+    }
+    if (!importMapping.visitor_name) {
+      toast({ title: 'Map a Visitor Name column first', variant: 'destructive' });
+      return;
+    }
+
+    await saveMappingToSettings(importMapping);
+
+    const inserts = rows.map((r) => {
+      const name = (r[importMapping.visitor_name] || '').trim();
+      if (!name) return null;
+      const checkInRaw = importMapping.check_in ? (r[importMapping.check_in] || '').trim() : '';
+      const checkIn = checkInRaw ? new Date(checkInRaw) : new Date();
+      const checkInIso = isNaN(checkIn.getTime()) ? new Date().toISOString() : checkIn.toISOString();
+      return {
+        visitor_name: name,
+        company: importMapping.company ? (r[importMapping.company] || '').trim() : '',
+        host_name: importMapping.host_name ? (r[importMapping.host_name] || '').trim() : '',
+        purpose: importMapping.purpose ? (r[importMapping.purpose] || '').trim() : '',
+        phone: importMapping.phone ? (r[importMapping.phone] || '').trim() : '',
+        check_in: checkInIso,
+        checked_in_by: user.id,
+        source: 'msforms',
+        extra_fields: r,
+      };
+    }).filter((x): x is Database['public']['Tables']['visitors']['Insert'] => Boolean(x));
+
+    if (inserts.length === 0) {
+      toast({ title: 'No valid rows found (missing names)', variant: 'destructive' });
+      return;
+    }
+
+    const { error } = await supabase.from('visitors').insert(inserts);
+    if (error) {
+      toast({ title: 'Import failed', description: error.message, variant: 'destructive' });
+      return;
+    }
+    toast({ title: 'Imported', description: `${inserts.length} visitor(s) added` });
+    setImportOpen(false);
+    setImportText('');
+    setImportHeaders([]);
+    loadAll();
+  };
+
   const activeCount = visitors.filter(v => !v.check_out).length;
   const enabledFields = fields.filter(f => f.enabled);
-  const filteredProfiles = visitorProfiles.slice(0, 8);
   const pagination = useTablePagination(visitors, rowsPerPageDefault);
 
   useEffect(() => {
@@ -208,7 +296,14 @@ export default function FrontDesk() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportCSV}><Download className="h-4 w-4 mr-2" />Export CSV</Button>
-          {role === 'admin' && (
+          {app?.ms_form_url && (
+            <>
+              <Button variant="outline" onClick={() => window.open(app.ms_form_url, '_blank')}><ExternalLink className="h-4 w-4 mr-2" />Open Form</Button>
+              <Button variant="outline" onClick={() => setFormLinkOpen(true)}><QrCode className="h-4 w-4 mr-2" />Form QR</Button>
+            </>
+          )}
+          <Button variant="outline" onClick={() => setImportOpen(true)}><Upload className="h-4 w-4 mr-2" />Import Form CSV</Button>
+          {canFrontDeskAdminTools && (
             <>
               <Button variant="outline" asChild><Link to="/visitor-kiosk"><Monitor className="h-4 w-4 mr-2" />Open Kiosk</Link></Button>
               <Button variant="outline" onClick={() => setFieldsOpen(true)}><Settings className="h-4 w-4 mr-2" />Form Fields</Button>
@@ -222,37 +317,6 @@ export default function FrontDesk() {
             <DialogContent className="max-h-[90vh] overflow-y-auto">
               <DialogHeader><DialogTitle>Check In Visitor</DialogTitle></DialogHeader>
               <div className="space-y-3 mt-2">
-                <div className="space-y-1">
-                  <Label>Quick Search (return visitor)</Label>
-                  <Input
-                    placeholder="Search by name, phone, or company..."
-                    value={nameSearch}
-                    onChange={(e) => setNameSearch(e.target.value)}
-                  />
-                  {nameSearch && (
-                    <div className="border rounded p-2 space-y-1 max-h-40 overflow-auto">
-                      {filteredProfiles.map((vp) => (
-                        <button
-                          key={vp.id}
-                          className="w-full text-left text-sm hover:bg-muted p-1 rounded"
-                          onClick={() => {
-                            setForm({
-                              ...form,
-                              visitor_name: vp.full_name || '',
-                              company: vp.company || '',
-                              phone: vp.phone || '',
-                            });
-                            setNameSearch(vp.full_name || '');
-                            setSelectedProfile(vp);
-                          }}
-                        >
-                          {vp.full_name} {vp.phone ? `• ${vp.phone}` : ''} {vp.company ? `• ${vp.company}` : ''}
-                        </button>
-                      ))}
-                      {filteredProfiles.length === 0 && <p className="text-xs text-muted-foreground">No matching visitor profile</p>}
-                    </div>
-                  )}
-                </div>
                 {enabledFields.map(f => (
                   <div key={f.id} className="space-y-1">
                     <Label>{f.field_label}{f.required && ' *'}</Label>
@@ -341,6 +405,75 @@ export default function FrontDesk() {
         </DialogContent>
       </Dialog>
 
+      {/* Microsoft Form QR */}
+      <Dialog open={formLinkOpen} onOpenChange={setFormLinkOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Microsoft Form (Visitor Check-in)</DialogTitle></DialogHeader>
+          {app?.ms_form_url ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-center p-3 border rounded bg-white">
+                <QRCodeCanvas value={app.ms_form_url} size={220} />
+              </div>
+              <p className="text-xs text-muted-foreground break-all">{app.ms_form_url}</p>
+              <Button onClick={() => navigator.clipboard.writeText(app.ms_form_url)} variant="outline" className="w-full">Copy Link</Button>
+              <Button onClick={() => window.open(app.ms_form_url, '_blank')} className="w-full">Open Form</Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Set the Microsoft Form URL in Master Settings first.</p>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Import MS Forms CSV */}
+      <Dialog open={importOpen} onOpenChange={setImportOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Import Microsoft Forms CSV</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Paste CSV (exported from Microsoft Forms responses)</Label>
+              <textarea
+                className="w-full min-h-[180px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={importText}
+                onChange={(e) => applyImportText(e.target.value)}
+                placeholder='Paste CSV here (first row must be headers)'
+              />
+              <p className="text-xs text-muted-foreground">
+                Tip: open the CSV in Excel and copy all, then paste here.
+              </p>
+            </div>
+
+            {importHeaders.length > 0 && (
+              <div className="space-y-2">
+                <Label>Column Mapping</Label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {(['check_in','visitor_name','company','host_name','purpose','phone'] as const).map((k) => (
+                    <div key={k} className="space-y-1">
+                      <Label className="text-xs">{k === 'check_in' ? 'Check-in Time' : k.replace('_', ' ')}</Label>
+                      <select
+                        className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                        value={importMapping[k] || ''}
+                        onChange={(e) => setImportMapping({ ...importMapping, [k]: e.target.value })}
+                      >
+                        <option value="">(not mapped)</option>
+                        {importHeaders.map((h) => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Only <span className="font-medium">visitor_name</span> is required; all others are optional.
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => { setImportText(''); setImportHeaders([]); }} className="flex-1">Clear</Button>
+              <Button onClick={importFromMsFormsCsv} className="flex-1">Import</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Form Fields Editor */}
       <Dialog open={fieldsOpen} onOpenChange={setFieldsOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -379,7 +512,7 @@ export default function FrontDesk() {
   );
 }
 
-function KioskSettingsForm({ settings, onSave }: { settings: any; onSave: (sheet: string, pin: string) => void }) {
+function KioskSettingsForm({ settings, onSave }: { settings: KioskSettingsRow | null; onSave: (sheet: string, pin: string) => void }) {
   const [sheet, setSheet] = useState(settings?.google_sheet_url || '');
   const [pin, setPin] = useState(settings?.exit_pin || '1234');
   return (

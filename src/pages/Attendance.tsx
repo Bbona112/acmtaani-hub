@@ -8,54 +8,79 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Clock, LogIn, LogOut, Users, BarChart3 } from 'lucide-react';
+import { Clock, LogIn, LogOut, Users, BarChart3, Pencil } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, isWithinInterval, parseISO } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { useTablePagination } from '@/hooks/useTablePagination';
 import { TablePaginationControls } from '@/components/TablePaginationControls';
 import { getAppSettings } from '@/lib/appSettings';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import type { Database } from '@/integrations/supabase/types';
+
+type AttendanceRow = Database['public']['Tables']['attendance']['Row'];
+type AttendanceUpdate = Database['public']['Tables']['attendance']['Update'];
+type AdminProfileRow = Pick<Database['public']['Tables']['profiles']['Row'], 'user_id' | 'full_name' | 'employee_id'>;
+type DirectoryProfileRow = Pick<Database['public']['Views']['directory_profiles']['Row'], 'user_id' | 'full_name'>;
+type ProfileRow = AdminProfileRow | DirectoryProfileRow;
+
+type EditAttendanceRecord = AttendanceRow & { clock_in_local: string; clock_out_local: string };
 
 const CHART_COLORS = ['hsl(230,65%,55%)', 'hsl(152,60%,42%)', 'hsl(38,92%,50%)', 'hsl(0,72%,51%)', 'hsl(280,60%,50%)'];
 
 export default function Attendance() {
   const { user, role } = useAuth();
   const { toast } = useToast();
-  const [records, setRecords] = useState<any[]>([]);
-  const [profiles, setProfiles] = useState<any[]>([]);
-  const [activeSession, setActiveSession] = useState<any>(null);
+  const [volunteerModules, setVolunteerModules] = useState<string[]>([]);
+  const [records, setRecords] = useState<AttendanceRow[]>([]);
+  const [profiles, setProfiles] = useState<ProfileRow[]>([]);
+  const [activeSession, setActiveSession] = useState<AttendanceRow | null>(null);
   const [loading, setLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState<string>('all');
   const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editRecord, setEditRecord] = useState<EditAttendanceRecord | null>(null);
+  const [editReason, setEditReason] = useState('');
+
+  const isAttendanceAdmin = role === 'admin' || (role === 'volunteer' && volunteerModules.includes('attendance_admin'));
 
   const loadRecords = async () => {
     if (!user) return;
-    const query = role === 'admin'
+    const query = isAttendanceAdmin
       ? supabase.from('attendance').select('*').order('clock_in', { ascending: false }).limit(500)
       : supabase.from('attendance').select('*').eq('user_id', user.id).order('clock_in', { ascending: false }).limit(100);
     const { data } = await query;
     if (data) {
       setRecords(data);
-      const active = data.find((r: any) => r.user_id === user.id && !r.clock_out);
+      const active = data.find((r) => r.user_id === user.id && !r.clock_out);
       setActiveSession(active || null);
     }
   };
 
   const loadProfiles = async () => {
-    // Admin: needs employee_id (allowed by admin RLS). Non-admin uses safe view.
-    const src = role === 'admin' ? supabase.from('profiles').select('user_id, full_name, employee_id')
-      : (supabase as any).from('directory_profiles').select('user_id, full_name');
+    // Attendance admins: use safe directory view (no PII) for names.
+    // Full profiles require directory_admin; not needed for attendance.
+    const src = supabase.from('directory_profiles').select('user_id, full_name');
     const { data } = await src;
-    if (data) setProfiles(data);
+    if (data) setProfiles(data as ProfileRow[]);
   };
 
   useEffect(() => {
+    supabase.from('app_settings').select('volunteer_admin_modules').limit(1).maybeSingle().then(({ data }) => {
+      const row = data as (Pick<Database['public']['Tables']['app_settings']['Row'], 'volunteer_admin_modules'> & { volunteer_admin_modules?: string[] }) | null;
+      setVolunteerModules(Array.isArray(row?.volunteer_admin_modules) ? row!.volunteer_admin_modules! : []);
+    });
+  }, []);
+
+  useEffect(() => {
     loadRecords();
-    if (role === 'admin') loadProfiles();
+    if (isAttendanceAdmin) loadProfiles();
     const channel = supabase.channel('attendance-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, () => loadRecords())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, role]);
+  }, [user, role, isAttendanceAdmin]);
 
   const clockIn = async () => {
     if (!user) return;
@@ -77,7 +102,7 @@ export default function Attendance() {
     setLoading(false);
   };
 
-  const adminClockOut = async (record: any) => {
+  const adminClockOut = async (record: AttendanceRow) => {
     const now = new Date();
     const hours = ((now.getTime() - new Date(record.clock_in).getTime()) / 3600000).toFixed(2);
     const { error } = await supabase.from('attendance').update({ clock_out: now.toISOString(), hours_worked: parseFloat(hours) }).eq('id', record.id);
@@ -85,9 +110,64 @@ export default function Attendance() {
     else toast({ title: 'Member clocked out', description: `${profileMap[record.user_id]?.name || 'Member'} — ${hours}h` });
   };
 
+  const openEdit = (record: AttendanceRow) => {
+    setEditRecord({
+      ...record,
+      clock_in_local: format(new Date(record.clock_in), "yyyy-MM-dd'T'HH:mm"),
+      clock_out_local: record.clock_out ? format(new Date(record.clock_out), "yyyy-MM-dd'T'HH:mm") : '',
+    });
+    setEditReason('');
+    setEditOpen(true);
+  };
+
+  const saveEdit = async () => {
+    if (!isAttendanceAdmin) return;
+    if (!editRecord) return;
+    if (!editReason.trim()) {
+      toast({ title: 'Reason required', description: 'Add a short reason for this change.', variant: 'destructive' });
+      return;
+    }
+    const newClockIn = new Date(editRecord.clock_in_local);
+    const newClockOut = editRecord.clock_out_local ? new Date(editRecord.clock_out_local) : null;
+    if (isNaN(newClockIn.getTime()) || (newClockOut && isNaN(newClockOut.getTime()))) {
+      toast({ title: 'Invalid date/time', variant: 'destructive' });
+      return;
+    }
+    if (newClockOut && newClockOut.getTime() < newClockIn.getTime()) {
+      toast({ title: 'Clock-out must be after clock-in', variant: 'destructive' });
+      return;
+    }
+
+    const before = { clock_in: editRecord.clock_in, clock_out: editRecord.clock_out, hours_worked: editRecord.hours_worked };
+    const hours = newClockOut ? ((newClockOut.getTime() - newClockIn.getTime()) / 3600000) : null;
+    const after: AttendanceUpdate = { clock_in: newClockIn.toISOString(), clock_out: newClockOut ? newClockOut.toISOString() : null, hours_worked: hours != null ? Math.round(hours * 100) / 100 : null };
+
+    const { error } = await supabase.from('attendance').update(after).eq('id', editRecord.id);
+    if (error) {
+      toast({ title: 'Update failed', description: error.message, variant: 'destructive' });
+      return;
+    }
+    await (supabase as unknown as { from: (table: 'attendance_audit') => { insert: (v: Record<string, unknown>) => Promise<{ error: { message: string } | null }> } })
+      .from('attendance_audit')
+      .insert({
+        attendance_id: editRecord.id,
+        edited_by: user?.id,
+        reason: editReason.trim(),
+        before,
+        after,
+      });
+    toast({ title: 'Updated attendance' });
+    setEditOpen(false);
+    setEditRecord(null);
+    loadRecords();
+  };
+
   const profileMap = useMemo(() => {
     const m: Record<string, { name: string; empId: string }> = {};
-    profiles.forEach(p => { m[p.user_id] = { name: p.full_name, empId: p.employee_id || '' }; });
+    profiles.forEach((p) => {
+      const empId = 'employee_id' in p ? (p.employee_id || '') : '';
+      m[p.user_id as string] = { name: p.full_name || 'Unknown', empId };
+    });
     return m;
   }, [profiles]);
 
@@ -146,10 +226,10 @@ export default function Attendance() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Attendance</h1>
-          <p className="text-muted-foreground mt-1">{role === 'admin' ? 'All staff attendance (real-time)' : 'Your daily attendance (real-time)'}</p>
+          <p className="text-muted-foreground mt-1">{isAttendanceAdmin ? 'All staff attendance (real-time)' : 'Your daily attendance (real-time)'}</p>
         </div>
         <div className="flex gap-2">
-          {role === 'admin' && <Button variant="outline" size="sm" onClick={exportCSV}>Export CSV</Button>}
+          {isAttendanceAdmin && <Button variant="outline" size="sm" onClick={exportCSV}>Export CSV</Button>}
           {!activeSession ? (
             <Button onClick={clockIn} disabled={loading}><LogIn className="h-4 w-4 mr-2" /> Clock In</Button>
           ) : (
@@ -167,7 +247,7 @@ export default function Attendance() {
         </Card>
       )}
 
-      {role === 'admin' && (
+      {isAttendanceAdmin && (
         <Tabs defaultValue="overview">
           <TabsList>
             <TabsTrigger value="overview"><BarChart3 className="h-4 w-4 mr-1" /> Overview</TabsTrigger>
@@ -234,9 +314,12 @@ export default function Attendance() {
                         <TableCell>{r.clock_out ? format(new Date(r.clock_out), 'h:mm a') : '—'}</TableCell>
                         <TableCell>{r.hours_worked ? `${r.hours_worked}h` : '—'}</TableCell>
                         <TableCell><Badge variant={r.clock_out ? 'secondary' : 'default'}>{r.clock_out ? 'Complete' : 'Active'}</Badge></TableCell>
+                        <TableCell className="text-right">
+                          <Button size="sm" variant="ghost" onClick={() => openEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
+                        </TableCell>
                       </TableRow>
                     ))}
-                    {filteredRecords.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No records</TableCell></TableRow>}
+                    {filteredRecords.length === 0 && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No records</TableCell></TableRow>}
                   </TableBody>
                 </Table>
                 <TablePaginationControls
@@ -255,7 +338,7 @@ export default function Attendance() {
               <CardHeader><CardTitle className="text-lg flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[hsl(var(--success))] animate-pulse" /> Currently Clocked In ({currentlyClockedIn.length})</CardTitle></CardHeader>
               <CardContent>
                 <Table>
-                  <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead>Employee ID</TableHead><TableHead>Clocked In At</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                  <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead>Employee ID</TableHead><TableHead>Clocked In At</TableHead><TableHead></TableHead><TableHead></TableHead></TableRow></TableHeader>
                   <TableBody>
                     {currentlyClockedIn.map(r => (
                       <TableRow key={r.id}>
@@ -267,9 +350,12 @@ export default function Attendance() {
                             <LogOut className="h-3 w-3 mr-1" /> Clock Out
                           </Button>
                         </TableCell>
+                        <TableCell className="text-right">
+                          <Button size="sm" variant="ghost" onClick={() => openEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
+                        </TableCell>
                       </TableRow>
                     ))}
-                    {currentlyClockedIn.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No one currently clocked in</TableCell></TableRow>}
+                    {currentlyClockedIn.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No one currently clocked in</TableCell></TableRow>}
                   </TableBody>
                 </Table>
               </CardContent>
@@ -278,7 +364,30 @@ export default function Attendance() {
         </Tabs>
       )}
 
-      {role !== 'admin' && (
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Edit Attendance</DialogTitle></DialogHeader>
+          {editRecord && (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <Label>Clock In</Label>
+                <Input type="datetime-local" value={editRecord.clock_in_local} onChange={(e) => setEditRecord({ ...editRecord, clock_in_local: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <Label>Clock Out (optional)</Label>
+                <Input type="datetime-local" value={editRecord.clock_out_local} onChange={(e) => setEditRecord({ ...editRecord, clock_out_local: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <Label>Reason (required)</Label>
+                <Input value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="e.g. missed scan, corrected time" />
+              </div>
+              <Button onClick={saveEdit} className="w-full">Save Changes</Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {!isAttendanceAdmin && (
         <Card className="border-border/50">
           <CardHeader><CardTitle className="text-lg">Your Attendance Log</CardTitle></CardHeader>
           <CardContent>

@@ -17,10 +17,12 @@ import { Progress } from '@/components/ui/progress';
 import { TablePaginationControls } from '@/components/TablePaginationControls';
 import { useTablePagination } from '@/hooks/useTablePagination';
 import { getAppSettings } from '@/lib/appSettings';
+import type { Database } from '@/integrations/supabase/types';
 
 export default function Assets() {
   const { user, role } = useAuth();
   const { toast } = useToast();
+  const [volunteerModules, setVolunteerModules] = useState<string[]>([]);
   const [assets, setAssets] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -34,17 +36,27 @@ export default function Assets() {
   const [filterType, setFilterType] = useState('all');
   const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
 
+  const canAssetsAdmin = role === 'admin' || (role === 'volunteer' && volunteerModules.includes('assets_admin'));
+
   const loadAll = async () => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
     const [a, s, p, v] = await Promise.all([
       supabase.from('assets').select('*').order('asset_tag'),
       supabase.from('asset_sessions').select('*').is('ended_at', null),
       supabase.from('directory_profiles').select('user_id, full_name'),
-      supabase.from('visitors').select('id, visitor_name, badge_number').is('check_out', null),
+      supabase.from('visitors')
+        .select('id, visitor_name, badge_number, check_in')
+        .gte('check_in', today.toISOString())
+        .is('check_out', null),
     ]);
     if (a.data) setAssets(a.data);
     if (s.data) setSessions(s.data);
     if (p.data) setProfiles(p.data);
     if (v.data) setVisitors(v.data);
+
+    const { data: appSettings } = await supabase.from('app_settings').select('volunteer_admin_modules').limit(1).maybeSingle();
+    const row = appSettings as (Pick<Database['public']['Tables']['app_settings']['Row'], 'volunteer_admin_modules'> & { volunteer_admin_modules?: string[] }) | null;
+    setVolunteerModules(Array.isArray(row?.volunteer_admin_modules) ? row!.volunteer_admin_modules! : []);
   };
 
   useEffect(() => {
@@ -136,7 +148,7 @@ export default function Assets() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={exportCSV}><Download className="h-4 w-4 mr-2" />Export</Button>
-          {role === 'admin' && (
+          {canAssetsAdmin && (
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
               <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" />Add Asset</Button></DialogTrigger>
               <DialogContent>
@@ -243,7 +255,7 @@ export default function Assets() {
                           ) : (
                             <Button size="sm" variant="outline" onClick={() => returnAsset(a)}>Return</Button>
                           )}
-                          {role === 'admin' && (
+                          {canAssetsAdmin && (
                             <>
                               <Button size="sm" variant="ghost" onClick={() => setEditAsset(a)}><Pencil className="h-3 w-3" /></Button>
                               <Button size="sm" variant="ghost" onClick={() => deleteAsset(a.id)}><Trash2 className="h-3 w-3" /></Button>
@@ -313,7 +325,7 @@ export default function Assets() {
       <Dialog open={!!editAsset} onOpenChange={(o) => !o && setEditAsset(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Asset</DialogTitle></DialogHeader>
-          {editAsset && (
+          {editAsset && canAssetsAdmin && (
             <div className="space-y-3">
               <div><Label>Name</Label><Input value={editAsset.name} onChange={(e) => setEditAsset({ ...editAsset, name: e.target.value })} /></div>
               <div><Label>Serial</Label><Input value={editAsset.serial_number || ''} onChange={(e) => setEditAsset({ ...editAsset, serial_number: e.target.value })} /></div>
