@@ -118,7 +118,15 @@ export default function Directory() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={saveEdit} className="w-full">Save Changes</Button>
+              <div className="flex gap-2">
+                <Button onClick={saveEdit} className="flex-1">Save Changes</Button>
+                <Button variant="outline" onClick={async () => {
+                  if (!editProfile?.email) return;
+                  const { error } = await supabase.auth.resetPasswordForEmail(editProfile.email, { redirectTo: `${window.location.origin}/reset-password` });
+                  if (error) toast({ title: 'Failed', description: error.message, variant: 'destructive' });
+                  else toast({ title: 'Reset email sent', description: editProfile.email });
+                }}>Send Password Reset</Button>
+              </div>
             </div>
           )}
         </DialogContent>
