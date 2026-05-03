@@ -362,10 +362,59 @@ export default function FrontDesk() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">In Building</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{activeCount}</p></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">New Today</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{visitors.length}</p></CardContent></Card>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">In Building Now</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{activeCount}</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Today</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{visitors.length}</p></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Checked Out</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{visitors.length - activeCount}</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Last 7 Days</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{recentVisitors.length}</p></CardContent></Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="h-4 w-4" />Visitors — Last 7 Days</CardTitle></CardHeader>
+          <CardContent style={{ height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={Array.from({ length: 7 }).map((_, i) => {
+                const d = startOfDay(subDays(new Date(), 6 - i));
+                const next = startOfDay(subDays(new Date(), 5 - i));
+                const count = recentVisitors.filter(v => new Date(v.check_in) >= d && new Date(v.check_in) < next).length;
+                return { day: format(d, 'EEE'), count };
+              })}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="day" className="text-xs" />
+                <YAxis allowDecimals={false} className="text-xs" />
+                <RTooltip />
+                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><Search className="h-4 w-4" />Returning Visitors</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            <Input placeholder="Search by name, phone, company..." value={profileSearch} onChange={(e) => setProfileSearch(e.target.value)} />
+            <div className="max-h-52 overflow-auto space-y-1">
+              {profiles.filter(p => {
+                if (!profileSearch.trim()) return false;
+                const q = profileSearch.toLowerCase();
+                return [p.full_name, p.phone, p.company].some((x: string) => x?.toLowerCase().includes(q));
+              }).slice(0, 10).map(p => (
+                <div key={p.id} className="flex items-center justify-between gap-2 p-2 rounded border text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium truncate">{p.full_name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{p.company || p.phone || p.badge_number}</p>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => openHistory(p)}><History className="h-3 w-3" /></Button>
+                  <Button size="sm" onClick={() => reuseProfile(p)}>Check In</Button>
+                </div>
+              ))}
+              {profileSearch.trim() && profiles.filter(p => {
+                const q = profileSearch.toLowerCase();
+                return [p.full_name, p.phone, p.company].some((x: string) => x?.toLowerCase().includes(q));
+              }).length === 0 && <p className="text-xs text-muted-foreground py-2">No matches.</p>}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
