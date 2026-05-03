@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          analytics_mode: string
+          battery_stale_after_minutes: number
+          default_checkout_location: string | null
+          enable_advanced_analytics: boolean
+          enable_guided_tour: boolean
+          enable_manual_page: boolean
+          id: string
+          rows_per_page: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          analytics_mode?: string
+          battery_stale_after_minutes?: number
+          default_checkout_location?: string | null
+          enable_advanced_analytics?: boolean
+          enable_guided_tour?: boolean
+          enable_manual_page?: boolean
+          id?: string
+          rows_per_page?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          analytics_mode?: string
+          battery_stale_after_minutes?: number
+          default_checkout_location?: string | null
+          enable_advanced_analytics?: boolean
+          enable_guided_tour?: boolean
+          enable_manual_page?: boolean
+          id?: string
+          rows_per_page?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       asset_sessions: {
         Row: {
           asset_id: string
@@ -353,6 +392,7 @@ export type Database = {
       inventory_checkouts: {
         Row: {
           checked_out_at: string
+          checkout_location: string | null
           created_at: string
           id: string
           inventory_item_id: string
@@ -363,6 +403,7 @@ export type Database = {
         }
         Insert: {
           checked_out_at?: string
+          checkout_location?: string | null
           created_at?: string
           id?: string
           inventory_item_id: string
@@ -373,6 +414,7 @@ export type Database = {
         }
         Update: {
           checked_out_at?: string
+          checkout_location?: string | null
           created_at?: string
           id?: string
           inventory_item_id?: string
@@ -491,6 +533,7 @@ export type Database = {
         Row: {
           avatar_url: string | null
           created_at: string
+          default_rows_per_page: number
           department: string | null
           email: string
           employee_id: string | null
@@ -499,12 +542,16 @@ export type Database = {
           onboarding_completed: boolean
           phone: string | null
           position: string | null
+          staff_card_url: string | null
+          tour_completed: boolean
+          tour_step: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
           avatar_url?: string | null
           created_at?: string
+          default_rows_per_page?: number
           department?: string | null
           email?: string
           employee_id?: string | null
@@ -513,12 +560,16 @@ export type Database = {
           onboarding_completed?: boolean
           phone?: string | null
           position?: string | null
+          staff_card_url?: string | null
+          tour_completed?: boolean
+          tour_step?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
           avatar_url?: string | null
           created_at?: string
+          default_rows_per_page?: number
           department?: string | null
           email?: string
           employee_id?: string | null
@@ -527,6 +578,9 @@ export type Database = {
           onboarding_completed?: boolean
           phone?: string | null
           position?: string | null
+          staff_card_url?: string | null
+          tour_completed?: boolean
+          tour_step?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -640,6 +694,51 @@ export type Database = {
         }
         Relationships: []
       }
+      visitor_profiles: {
+        Row: {
+          badge_number: string | null
+          company: string | null
+          created_at: string
+          extra_fields: Json
+          first_seen_at: string
+          full_name: string
+          id: string
+          last_seen_at: string
+          normalized_name: string
+          normalized_phone: string | null
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          badge_number?: string | null
+          company?: string | null
+          created_at?: string
+          extra_fields?: Json
+          first_seen_at?: string
+          full_name: string
+          id?: string
+          last_seen_at?: string
+          normalized_name: string
+          normalized_phone?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          badge_number?: string | null
+          company?: string | null
+          created_at?: string
+          extra_fields?: Json
+          first_seen_at?: string
+          full_name?: string
+          id?: string
+          last_seen_at?: string
+          normalized_name?: string
+          normalized_phone?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       visitors: {
         Row: {
           badge_number: string | null
@@ -657,6 +756,7 @@ export type Database = {
           purpose: string | null
           source: string
           visitor_name: string
+          visitor_profile_id: string | null
         }
         Insert: {
           badge_number?: string | null
@@ -674,6 +774,7 @@ export type Database = {
           purpose?: string | null
           source?: string
           visitor_name: string
+          visitor_profile_id?: string | null
         }
         Update: {
           badge_number?: string | null
@@ -691,8 +792,17 @@ export type Database = {
           purpose?: string | null
           source?: string
           visitor_name?: string
+          visitor_profile_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "visitors_visitor_profile_id_fkey"
+            columns: ["visitor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "visitor_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -735,6 +845,9 @@ export type Database = {
         }
         Returns: boolean
       }
+      reset_asset_tag_numbering: { Args: never; Returns: undefined }
+      reset_front_desk_data: { Args: never; Returns: undefined }
+      reset_inventory_asset_id_numbering: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "employee" | "volunteer"
