@@ -585,7 +585,25 @@ export default function FrontDesk() {
           <KioskSettingsForm settings={settings} onSave={saveSettings} />
         </DialogContent>
       </Dialog>
-    </div>
+
+      {/* Visitor History */}
+      <Dialog open={!!historyVisitor} onOpenChange={(o) => !o && setHistoryVisitor(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>{historyVisitor?.full_name} — Visit History</DialogTitle></DialogHeader>
+          <div className="space-y-2 max-h-[60vh] overflow-auto">
+            {history.length === 0 && <p className="text-sm text-muted-foreground">No prior visits recorded.</p>}
+            {history.map(v => (
+              <div key={v.id} className="flex items-center justify-between border rounded p-2 text-sm">
+                <div>
+                  <p className="font-medium">{format(new Date(v.check_in), 'PPp')}</p>
+                  <p className="text-xs text-muted-foreground">{v.purpose || '—'} {v.host_name ? `· Host: ${v.host_name}` : ''}</p>
+                </div>
+                <Badge variant="outline" className="font-mono text-xs">{v.badge_number}</Badge>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
   );
 }
 
