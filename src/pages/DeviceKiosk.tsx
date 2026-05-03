@@ -63,16 +63,19 @@ export default function DeviceKiosk() {
     init();
     const t = setInterval(() => setTime(new Date()), 1000);
 
-    // Realtime session updates
-    const ch = supabase.channel(`device-${tag}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'asset_sessions' }, async () => {
-        const { data: s } = await supabase.from('asset_sessions').select('*').eq('asset_id', a.id).is('ended_at', null).maybeSingle();
+    return () => { mounted = false; clearInterval(t); };
+  }, [tag, reportBattery]);
+
+  useEffect(() => {
+    if (!asset?.id) return;
+    const ch = supabase.channel(`device-${asset.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'asset_sessions', filter: `asset_id=eq.${asset.id}` }, async () => {
+        const { data: s } = await supabase.from('asset_sessions').select('*').eq('asset_id', asset.id).is('ended_at', null).maybeSingle();
         setSession(s);
       })
       .subscribe();
-
-    return () => { mounted = false; clearInterval(t); supabase.removeChannel(ch); };
-  }, [tag, reportBattery]);
+    return () => { supabase.removeChannel(ch); };
+  }, [asset?.id]);
 
   if (error && !asset) {
     return (
