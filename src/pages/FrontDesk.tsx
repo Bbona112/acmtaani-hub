@@ -34,6 +34,11 @@ export default function FrontDesk() {
   const { user, role } = useAuth();
   const { toast } = useToast();
   const [visitors, setVisitors] = useState<VisitorRow[]>([]);
+  const [recentVisitors, setRecentVisitors] = useState<VisitorRow[]>([]); // last 7 days for trends
+  const [profiles, setProfiles] = useState<any[]>([]); // visitor_profiles
+  const [profileSearch, setProfileSearch] = useState('');
+  const [historyVisitor, setHistoryVisitor] = useState<any | null>(null);
+  const [history, setHistory] = useState<VisitorRow[]>([]);
   const [fields, setFields] = useState<VisitorFieldRow[]>([]);
   const [settings, setSettings] = useState<KioskSettingsRow | null>(null);
   const [app, setApp] = useState<AppSettingsRow | null>(null);
