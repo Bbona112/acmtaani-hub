@@ -604,6 +604,7 @@ export default function FrontDesk() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
   );
 }
 
