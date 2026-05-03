@@ -66,14 +66,19 @@ export default function FrontDesk() {
 
   const loadAll = async () => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const [v, f, s] = await Promise.all([
+    const weekAgo = startOfDay(subDays(new Date(), 6));
+    const [v, recent, f, s, p] = await Promise.all([
       supabase.from('visitors').select('*').gte('check_in', today.toISOString()).order('check_in', { ascending: false }),
+      supabase.from('visitors').select('*').gte('check_in', weekAgo.toISOString()).order('check_in', { ascending: false }),
       supabase.from('visitor_form_fields').select('*').order('display_order'),
       supabase.from('kiosk_settings').select('*').limit(1).maybeSingle(),
+      supabase.from('visitor_profiles').select('*').order('last_seen_at', { ascending: false }).limit(200),
     ]);
     if (v.data) setVisitors(v.data);
+    if (recent.data) setRecentVisitors(recent.data);
     if (f.data) setFields(f.data);
     if (s.data) setSettings(s.data);
+    if (p.data) setProfiles(p.data);
     const { data: appSettings } = await supabase.from('app_settings').select('*').limit(1).maybeSingle();
     if (appSettings) {
       const row = appSettings as AppSettingsRow;
