@@ -256,7 +256,7 @@ export default function FrontDesk() {
         source: 'msforms',
         extra_fields: r,
       };
-    }).filter((x): x is Database['public']['Tables']['visitors']['Insert'] => Boolean(x));
+    }).filter(Boolean) as Database['public']['Tables']['visitors']['Insert'][];
 
     if (inserts.length === 0) {
       toast({ title: 'No valid rows found (missing names)', variant: 'destructive' });

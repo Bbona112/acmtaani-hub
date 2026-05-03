@@ -294,7 +294,7 @@ export default function Attendance() {
               <SelectTrigger className="w-64"><SelectValue placeholder="Select employee" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Employees</SelectItem>
-                {profiles.map(p => <SelectItem key={p.user_id} value={p.user_id}>{p.full_name} ({p.employee_id})</SelectItem>)}
+                {profiles.map(p => <SelectItem key={p.user_id} value={p.user_id}>{p.full_name}{(p as any).employee_id ? ` (${(p as any).employee_id})` : ''}</SelectItem>)}
               </SelectContent>
             </Select>
             <Card className="border-border/50">
