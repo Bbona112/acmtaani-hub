@@ -11,8 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, LogOut, Users, Settings, Trash2, Plus, Download, Printer, Monitor, ExternalLink, QrCode, Upload } from 'lucide-react';
-import { format } from 'date-fns';
+import { UserPlus, LogOut, Users, Settings, Trash2, Plus, Download, Printer, Monitor, ExternalLink, QrCode, Upload, Search, TrendingUp, History } from 'lucide-react';
+import { format, subDays, startOfDay } from 'date-fns';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid } from 'recharts';
 import { Link } from 'react-router-dom';
 import { useTablePagination } from '@/hooks/useTablePagination';
 import { TablePaginationControls } from '@/components/TablePaginationControls';
