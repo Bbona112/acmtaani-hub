@@ -141,6 +141,23 @@ export default function FrontDesk() {
     else toast({ title: 'Visitor checked out' });
   };
 
+  const reuseProfile = (p: any) => {
+    setForm({
+      visitor_name: p.full_name || '',
+      company: p.company || '',
+      phone: p.phone || '',
+      ...(p.extra_fields || {}),
+    });
+    setDialogOpen(true);
+  };
+
+  const openHistory = async (p: any) => {
+    setHistoryVisitor(p);
+    const { data } = await supabase.from('visitors').select('*')
+      .eq('visitor_profile_id', p.id).order('check_in', { ascending: false }).limit(50);
+    setHistory(data || []);
+  };
+
   const exportCSV = () => {
     const rows = [
       ['Badge', 'Name', 'Company', 'Host', 'Purpose', 'Phone', 'Check In', 'Check Out'],
