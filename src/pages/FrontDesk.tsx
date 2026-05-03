@@ -11,8 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, LogOut, Users, Settings, Trash2, Plus, Download, Printer, Monitor, ExternalLink, QrCode, Upload } from 'lucide-react';
-import { format } from 'date-fns';
+import { UserPlus, LogOut, Users, Settings, Trash2, Plus, Download, Printer, Monitor, ExternalLink, QrCode, Upload, Search, TrendingUp, History } from 'lucide-react';
+import { format, subDays, startOfDay } from 'date-fns';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid } from 'recharts';
 import { Link } from 'react-router-dom';
 import { useTablePagination } from '@/hooks/useTablePagination';
 import { TablePaginationControls } from '@/components/TablePaginationControls';
@@ -33,6 +34,11 @@ export default function FrontDesk() {
   const { user, role } = useAuth();
   const { toast } = useToast();
   const [visitors, setVisitors] = useState<VisitorRow[]>([]);
+  const [recentVisitors, setRecentVisitors] = useState<VisitorRow[]>([]); // last 7 days for trends
+  const [profiles, setProfiles] = useState<any[]>([]); // visitor_profiles
+  const [profileSearch, setProfileSearch] = useState('');
+  const [historyVisitor, setHistoryVisitor] = useState<any | null>(null);
+  const [history, setHistory] = useState<VisitorRow[]>([]);
   const [fields, setFields] = useState<VisitorFieldRow[]>([]);
   const [settings, setSettings] = useState<KioskSettingsRow | null>(null);
   const [app, setApp] = useState<AppSettingsRow | null>(null);
@@ -60,14 +66,19 @@ export default function FrontDesk() {
 
   const loadAll = async () => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const [v, f, s] = await Promise.all([
+    const weekAgo = startOfDay(subDays(new Date(), 6));
+    const [v, recent, f, s, p] = await Promise.all([
       supabase.from('visitors').select('*').gte('check_in', today.toISOString()).order('check_in', { ascending: false }),
+      supabase.from('visitors').select('*').gte('check_in', weekAgo.toISOString()).order('check_in', { ascending: false }),
       supabase.from('visitor_form_fields').select('*').order('display_order'),
       supabase.from('kiosk_settings').select('*').limit(1).maybeSingle(),
+      supabase.from('visitor_profiles').select('*').order('last_seen_at', { ascending: false }).limit(200),
     ]);
     if (v.data) setVisitors(v.data);
+    if (recent.data) setRecentVisitors(recent.data);
     if (f.data) setFields(f.data);
     if (s.data) setSettings(s.data);
+    if (p.data) setProfiles(p.data);
     const { data: appSettings } = await supabase.from('app_settings').select('*').limit(1).maybeSingle();
     if (appSettings) {
       const row = appSettings as AppSettingsRow;
@@ -128,6 +139,23 @@ export default function FrontDesk() {
     const { error } = await supabase.from('visitors').update({ check_out: new Date().toISOString() }).eq('id', id);
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
     else toast({ title: 'Visitor checked out' });
+  };
+
+  const reuseProfile = (p: any) => {
+    setForm({
+      visitor_name: p.full_name || '',
+      company: p.company || '',
+      phone: p.phone || '',
+      ...(p.extra_fields || {}),
+    });
+    setDialogOpen(true);
+  };
+
+  const openHistory = async (p: any) => {
+    setHistoryVisitor(p);
+    const { data } = await supabase.from('visitors').select('*')
+      .eq('visitor_profile_id', p.id).order('check_in', { ascending: false }).limit(50);
+    setHistory(data || []);
   };
 
   const exportCSV = () => {
@@ -256,7 +284,7 @@ export default function FrontDesk() {
         source: 'msforms',
         extra_fields: r,
       };
-    }).filter((x): x is Database['public']['Tables']['visitors']['Insert'] => Boolean(x));
+    }).filter(Boolean) as Database['public']['Tables']['visitors']['Insert'][];
 
     if (inserts.length === 0) {
       toast({ title: 'No valid rows found (missing names)', variant: 'destructive' });
@@ -334,10 +362,59 @@ export default function FrontDesk() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">In Building</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{activeCount}</p></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">New Today</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{visitors.length}</p></CardContent></Card>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">In Building Now</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{activeCount}</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Today</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{visitors.length}</p></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Checked Out</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{visitors.length - activeCount}</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Last 7 Days</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{recentVisitors.length}</p></CardContent></Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="h-4 w-4" />Visitors — Last 7 Days</CardTitle></CardHeader>
+          <CardContent style={{ height: 220 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={Array.from({ length: 7 }).map((_, i) => {
+                const d = startOfDay(subDays(new Date(), 6 - i));
+                const next = startOfDay(subDays(new Date(), 5 - i));
+                const count = recentVisitors.filter(v => new Date(v.check_in) >= d && new Date(v.check_in) < next).length;
+                return { day: format(d, 'EEE'), count };
+              })}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="day" className="text-xs" />
+                <YAxis allowDecimals={false} className="text-xs" />
+                <RTooltip />
+                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-base flex items-center gap-2"><Search className="h-4 w-4" />Returning Visitors</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            <Input placeholder="Search by name, phone, company..." value={profileSearch} onChange={(e) => setProfileSearch(e.target.value)} />
+            <div className="max-h-52 overflow-auto space-y-1">
+              {profiles.filter(p => {
+                if (!profileSearch.trim()) return false;
+                const q = profileSearch.toLowerCase();
+                return [p.full_name, p.phone, p.company].some((x: string) => x?.toLowerCase().includes(q));
+              }).slice(0, 10).map(p => (
+                <div key={p.id} className="flex items-center justify-between gap-2 p-2 rounded border text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium truncate">{p.full_name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{p.company || p.phone || p.badge_number}</p>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => openHistory(p)}><History className="h-3 w-3" /></Button>
+                  <Button size="sm" onClick={() => reuseProfile(p)}>Check In</Button>
+                </div>
+              ))}
+              {profileSearch.trim() && profiles.filter(p => {
+                const q = profileSearch.toLowerCase();
+                return [p.full_name, p.phone, p.company].some((x: string) => x?.toLowerCase().includes(q));
+              }).length === 0 && <p className="text-xs text-muted-foreground py-2">No matches.</p>}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -506,6 +583,25 @@ export default function FrontDesk() {
         <DialogContent>
           <DialogHeader><DialogTitle>Kiosk Settings</DialogTitle></DialogHeader>
           <KioskSettingsForm settings={settings} onSave={saveSettings} />
+        </DialogContent>
+      </Dialog>
+
+      {/* Visitor History */}
+      <Dialog open={!!historyVisitor} onOpenChange={(o) => !o && setHistoryVisitor(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>{historyVisitor?.full_name} — Visit History</DialogTitle></DialogHeader>
+          <div className="space-y-2 max-h-[60vh] overflow-auto">
+            {history.length === 0 && <p className="text-sm text-muted-foreground">No prior visits recorded.</p>}
+            {history.map(v => (
+              <div key={v.id} className="flex items-center justify-between border rounded p-2 text-sm">
+                <div>
+                  <p className="font-medium">{format(new Date(v.check_in), 'PPp')}</p>
+                  <p className="text-xs text-muted-foreground">{v.purpose || '—'} {v.host_name ? `· Host: ${v.host_name}` : ''}</p>
+                </div>
+                <Badge variant="outline" className="font-mono text-xs">{v.badge_number}</Badge>
+              </div>
+            ))}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -23,9 +23,12 @@ export type Database = {
           enable_guided_tour: boolean
           enable_manual_page: boolean
           id: string
+          ms_form_url: string | null
+          ms_forms_mapping: Json | null
           rows_per_page: number
           updated_at: string
           updated_by: string | null
+          volunteer_admin_modules: string[]
         }
         Insert: {
           analytics_mode?: string
@@ -35,9 +38,12 @@ export type Database = {
           enable_guided_tour?: boolean
           enable_manual_page?: boolean
           id?: string
+          ms_form_url?: string | null
+          ms_forms_mapping?: Json | null
           rows_per_page?: number
           updated_at?: string
           updated_by?: string | null
+          volunteer_admin_modules?: string[]
         }
         Update: {
           analytics_mode?: string
@@ -47,9 +53,12 @@ export type Database = {
           enable_guided_tour?: boolean
           enable_manual_page?: boolean
           id?: string
+          ms_form_url?: string | null
+          ms_forms_mapping?: Json | null
           rows_per_page?: number
           updated_at?: string
           updated_by?: string | null
+          volunteer_admin_modules?: string[]
         }
         Relationships: []
       }
@@ -804,6 +813,88 @@ export type Database = {
           },
         ]
       }
+      volunteer_group_members: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "volunteer_group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "volunteer_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      volunteer_group_modules: {
+        Row: {
+          created_at: string
+          group_id: string
+          id: string
+          module_key: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          id?: string
+          module_key: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          id?: string
+          module_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "volunteer_group_modules_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "volunteer_groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      volunteer_groups: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       directory_profiles: {
@@ -845,9 +936,19 @@ export type Database = {
         }
         Returns: boolean
       }
+      my_module_keys: {
+        Args: never
+        Returns: {
+          module_key: string
+        }[]
+      }
       reset_asset_tag_numbering: { Args: never; Returns: undefined }
       reset_front_desk_data: { Args: never; Returns: undefined }
       reset_inventory_asset_id_numbering: { Args: never; Returns: undefined }
+      user_has_module: {
+        Args: { _module_key: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "employee" | "volunteer"

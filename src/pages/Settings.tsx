@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { VolunteerGroupsManager } from "@/components/VolunteerGroupsManager";
 import type { Database } from "@/integrations/supabase/types";
 
 type VisitorFieldRow = Database["public"]["Tables"]["visitor_form_fields"]["Row"];
@@ -208,6 +209,8 @@ export default function Settings() {
           </div>
         </CardContent>
       </Card>
+
+      <VolunteerGroupsManager modules={VOLUNTEER_MODULES} />
 
       {canUseResetTools && (
         <Card>
