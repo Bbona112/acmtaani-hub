@@ -62,6 +62,45 @@ export type Database = {
         }
         Relationships: []
       }
+      asset_battery_history: {
+        Row: {
+          asset_id: string
+          charging: boolean | null
+          id: string
+          level: number
+          recorded_at: string
+        }
+        Insert: {
+          asset_id: string
+          charging?: boolean | null
+          id?: string
+          level: number
+          recorded_at?: string
+        }
+        Update: {
+          asset_id?: string
+          charging?: boolean | null
+          id?: string
+          level?: number
+          recorded_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_battery_history_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "asset_health_v"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "asset_battery_history_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       asset_sessions: {
         Row: {
           asset_id: string
@@ -100,6 +139,13 @@ export type Database = {
           visitor_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "asset_sessions_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "asset_health_v"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "asset_sessions_asset_id_fkey"
             columns: ["asset_id"]
@@ -595,6 +641,41 @@ export type Database = {
         }
         Relationships: []
       }
+      task_comments: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          task_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          task_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          task_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_comments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           approval_status: string
@@ -897,6 +978,45 @@ export type Database = {
       }
     }
     Views: {
+      asset_health_v: {
+        Row: {
+          asset_tag: string | null
+          asset_type: string | null
+          battery_charging: boolean | null
+          battery_health: string | null
+          battery_percent: number | null
+          battery_updated_at: string | null
+          id: string | null
+          minutes_since_update: number | null
+          name: string | null
+          status: string | null
+        }
+        Insert: {
+          asset_tag?: string | null
+          asset_type?: string | null
+          battery_charging?: boolean | null
+          battery_health?: never
+          battery_percent?: number | null
+          battery_updated_at?: string | null
+          id?: string | null
+          minutes_since_update?: never
+          name?: string | null
+          status?: string | null
+        }
+        Update: {
+          asset_tag?: string | null
+          asset_type?: string | null
+          battery_charging?: boolean | null
+          battery_health?: never
+          battery_percent?: number | null
+          battery_updated_at?: string | null
+          id?: string | null
+          minutes_since_update?: never
+          name?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
       directory_profiles: {
         Row: {
           avatar_url: string | null
