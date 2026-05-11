@@ -57,6 +57,19 @@ export default function Assets() {
   const [search, setSearch] = useState('');
   const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [linksOpen, setLinksOpen] = useState(false);
+
+  const deviceUrl = (tag: string) =>
+    typeof window !== 'undefined' ? `${window.location.origin}/device/${tag}` : `/device/${tag}`;
+
+  const copyDeviceLink = async (tag: string) => {
+    try {
+      await navigator.clipboard.writeText(deviceUrl(tag));
+      toast({ title: 'Link copied', description: deviceUrl(tag) });
+    } catch {
+      toast({ title: 'Could not copy', variant: 'destructive' });
+    }
+  };
 
   const canAssetsAdmin = role === 'admin' || (role === 'volunteer' && volunteerModules.includes('assets_admin'));
 
