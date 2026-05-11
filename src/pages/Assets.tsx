@@ -493,6 +493,41 @@ export default function Assets() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Device Links dialog */}
+      <Dialog open={linksOpen} onOpenChange={setLinksOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Device Telemetry Links</DialogTitle>
+            <CardDescription>Open each link on the matching device (Chrome/Edge) to stream live battery. Print or scan the QR.</CardDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            {assets.map((a) => (
+              <div key={a.id} className="border rounded p-3 flex flex-col items-center text-center gap-2">
+                <p className="font-mono text-xs text-muted-foreground">{a.asset_tag}</p>
+                <p className="font-medium text-sm leading-tight">{a.name}</p>
+                <div className="bg-white p-2 rounded">
+                  <QRCodeSVG value={deviceUrl(a.asset_tag)} size={110} />
+                </div>
+                <div className="flex gap-1 w-full">
+                  <Button size="sm" variant="outline" className="flex-1" asChild>
+                    <a href={deviceUrl(a.asset_tag)} target="_blank" rel="noreferrer"><ExternalLink className="h-3 w-3 mr-1" />Open</a>
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => copyDeviceLink(a.asset_tag)}>
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {assets.length === 0 && <p className="text-sm text-muted-foreground col-span-full text-center py-8">No assets yet.</p>}
+          </div>
+          <div className="pt-3 border-t">
+            <Button variant="outline" onClick={() => window.print()} className="w-full">
+              <QrCode className="h-4 w-4 mr-2" />Print QR sheet
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
