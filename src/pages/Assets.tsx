@@ -14,7 +14,9 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Plus, ArrowRightLeft, Trash2, Battery, BatteryCharging, Activity,
   Pencil, Download, Search, AlertTriangle, Wifi, WifiOff,
+  ExternalLink, Copy, QrCode,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { Progress } from '@/components/ui/progress';
 import { TablePaginationControls } from '@/components/TablePaginationControls';
@@ -55,6 +57,19 @@ export default function Assets() {
   const [search, setSearch] = useState('');
   const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [linksOpen, setLinksOpen] = useState(false);
+
+  const deviceUrl = (tag: string) =>
+    typeof window !== 'undefined' ? `${window.location.origin}/device/${tag}` : `/device/${tag}`;
+
+  const copyDeviceLink = async (tag: string) => {
+    try {
+      await navigator.clipboard.writeText(deviceUrl(tag));
+      toast({ title: 'Link copied', description: deviceUrl(tag) });
+    } catch {
+      toast({ title: 'Could not copy', variant: 'destructive' });
+    }
+  };
 
   const canAssetsAdmin = role === 'admin' || (role === 'volunteer' && volunteerModules.includes('assets_admin'));
 
@@ -221,6 +236,7 @@ export default function Assets() {
           {selectedIds.size > 0 && canAssetsAdmin && (
             <Button variant="outline" onClick={bulkReturn}>Return {selectedIds.size}</Button>
           )}
+          <Button variant="outline" onClick={() => setLinksOpen(true)}><QrCode className="h-4 w-4 mr-2" />Device Links</Button>
           <Button variant="outline" onClick={exportCSV}><Download className="h-4 w-4 mr-2" />Export</Button>
           {canAssetsAdmin && (
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -387,6 +403,12 @@ export default function Assets() {
                           ) : (
                             <Button size="sm" variant="outline" onClick={() => returnAsset(a)}>Return</Button>
                           )}
+                          <Button size="sm" variant="ghost" asChild title="Open device kiosk page">
+                            <a href={deviceUrl(a.asset_tag)} target="_blank" rel="noreferrer"><ExternalLink className="h-3 w-3" /></a>
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => copyDeviceLink(a.asset_tag)} title="Copy device URL">
+                            <Copy className="h-3 w-3" />
+                          </Button>
                           {canAssetsAdmin && (
                             <>
                               <Button size="sm" variant="ghost" onClick={() => setEditAsset(a)}><Pencil className="h-3 w-3" /></Button>
@@ -469,6 +491,41 @@ export default function Assets() {
               <Button onClick={updateAsset} className="w-full">Save</Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Device Links dialog */}
+      <Dialog open={linksOpen} onOpenChange={setLinksOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Device Telemetry Links</DialogTitle>
+            <CardDescription>Open each link on the matching device (Chrome/Edge) to stream live battery. Print or scan the QR.</CardDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+            {assets.map((a) => (
+              <div key={a.id} className="border rounded p-3 flex flex-col items-center text-center gap-2">
+                <p className="font-mono text-xs text-muted-foreground">{a.asset_tag}</p>
+                <p className="font-medium text-sm leading-tight">{a.name}</p>
+                <div className="bg-white p-2 rounded">
+                  <QRCodeSVG value={deviceUrl(a.asset_tag)} size={110} />
+                </div>
+                <div className="flex gap-1 w-full">
+                  <Button size="sm" variant="outline" className="flex-1" asChild>
+                    <a href={deviceUrl(a.asset_tag)} target="_blank" rel="noreferrer"><ExternalLink className="h-3 w-3 mr-1" />Open</a>
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => copyDeviceLink(a.asset_tag)}>
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {assets.length === 0 && <p className="text-sm text-muted-foreground col-span-full text-center py-8">No assets yet.</p>}
+          </div>
+          <div className="pt-3 border-t">
+            <Button variant="outline" onClick={() => window.print()} className="w-full">
+              <QrCode className="h-4 w-4 mr-2" />Print QR sheet
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
