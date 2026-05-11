@@ -236,7 +236,8 @@ export default function FrontDesk() {
     // Upsert profiles
     const profileArr = Array.from(profileMap.values());
     if (profileArr.length) {
-      await supabase.from('visitor_profiles').upsert(profileArr as any, { onConflict: 'normalized_name,normalized_phone' as any, ignoreDuplicates: true });
+      // Best-effort insert; duplicates are silently ignored
+      await supabase.from('visitor_profiles').insert(profileArr as any);
     }
     if (visitorInserts.length === 0) {
       toast({ title: 'No valid rows (missing names)', variant: 'destructive' }); return;
