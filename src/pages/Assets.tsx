@@ -236,6 +236,7 @@ export default function Assets() {
           {selectedIds.size > 0 && canAssetsAdmin && (
             <Button variant="outline" onClick={bulkReturn}>Return {selectedIds.size}</Button>
           )}
+          <Button variant="outline" onClick={() => setLinksOpen(true)}><QrCode className="h-4 w-4 mr-2" />Device Links</Button>
           <Button variant="outline" onClick={exportCSV}><Download className="h-4 w-4 mr-2" />Export</Button>
           {canAssetsAdmin && (
             <Dialog open={addOpen} onOpenChange={setAddOpen}>
