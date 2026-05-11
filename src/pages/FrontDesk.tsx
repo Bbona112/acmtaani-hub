@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -8,10 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, LogOut, Users, Settings, Trash2, Plus, Download, Printer, Monitor, ExternalLink, QrCode, Upload, Search, TrendingUp, History } from 'lucide-react';
+import { LogOut, Settings, Download, Printer, Monitor, ExternalLink, QrCode, Upload, Search, TrendingUp, History, RefreshCw, UserCheck } from 'lucide-react';
 import { format, subDays, startOfDay } from 'date-fns';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, CartesianGrid } from 'recharts';
 import { Link } from 'react-router-dom';
@@ -22,7 +20,6 @@ import { QRCodeCanvas } from 'qrcode.react';
 import type { Database } from '@/integrations/supabase/types';
 
 type VisitorRow = Database['public']['Tables']['visitors']['Row'];
-type VisitorFieldRow = Database['public']['Tables']['visitor_form_fields']['Row'];
 type KioskSettingsRow = Database['public']['Tables']['kiosk_settings']['Row'];
 type AppSettingsRow = Database['public']['Tables']['app_settings']['Row'] & {
   ms_form_url?: string;
@@ -30,60 +27,51 @@ type AppSettingsRow = Database['public']['Tables']['app_settings']['Row'] & {
   volunteer_admin_modules?: string[];
 };
 
+const DEFAULT_MAPPING: Record<string, string> = {
+  check_in: '', visitor_name: '', company: '', host_name: '', purpose: '', phone: '',
+};
+
 export default function FrontDesk() {
   const { user, role } = useAuth();
   const { toast } = useToast();
   const [visitors, setVisitors] = useState<VisitorRow[]>([]);
-  const [recentVisitors, setRecentVisitors] = useState<VisitorRow[]>([]); // last 7 days for trends
-  const [profiles, setProfiles] = useState<any[]>([]); // visitor_profiles
+  const [recentVisitors, setRecentVisitors] = useState<VisitorRow[]>([]);
+  const [profiles, setProfiles] = useState<any[]>([]);
   const [profileSearch, setProfileSearch] = useState('');
   const [historyVisitor, setHistoryVisitor] = useState<any | null>(null);
   const [history, setHistory] = useState<VisitorRow[]>([]);
-  const [fields, setFields] = useState<VisitorFieldRow[]>([]);
   const [settings, setSettings] = useState<KioskSettingsRow | null>(null);
   const [app, setApp] = useState<AppSettingsRow | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [fieldsOpen, setFieldsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [formLinkOpen, setFormLinkOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [badgeVisitor, setBadgeVisitor] = useState<VisitorRow | null>(null);
-  const [form, setForm] = useState<Record<string, string>>({});
   const [rowsPerPageDefault, setRowsPerPageDefault] = useState(10);
-  const [newField, setNewField] = useState({ field_key: '', field_label: '', field_type: 'text', required: false });
   const [importText, setImportText] = useState('');
   const [importHeaders, setImportHeaders] = useState<string[]>([]);
-  const [importMapping, setImportMapping] = useState<Record<string, string>>({
-    check_in: '',
-    visitor_name: '',
-    company: '',
-    host_name: '',
-    purpose: '',
-    phone: '',
-  });
+  const [importMapping, setImportMapping] = useState<Record<string, string>>(DEFAULT_MAPPING);
+  const [syncing, setSyncing] = useState(false);
 
   const canFrontDeskAdminTools = role === 'admin' || (role === 'volunteer' && (app?.volunteer_admin_modules || []).includes('frontdesk_admin_tools'));
 
   const loadAll = async () => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const weekAgo = startOfDay(subDays(new Date(), 6));
-    const [v, recent, f, s, p] = await Promise.all([
+    const [v, recent, s, p] = await Promise.all([
       supabase.from('visitors').select('*').gte('check_in', today.toISOString()).order('check_in', { ascending: false }),
       supabase.from('visitors').select('*').gte('check_in', weekAgo.toISOString()).order('check_in', { ascending: false }),
-      supabase.from('visitor_form_fields').select('*').order('display_order'),
       supabase.from('kiosk_settings').select('*').limit(1).maybeSingle(),
-      supabase.from('visitor_profiles').select('*').order('last_seen_at', { ascending: false }).limit(200),
+      supabase.from('visitor_profiles').select('*').order('last_seen_at', { ascending: false }).limit(500),
     ]);
     if (v.data) setVisitors(v.data);
     if (recent.data) setRecentVisitors(recent.data);
-    if (f.data) setFields(f.data);
     if (s.data) setSettings(s.data);
     if (p.data) setProfiles(p.data);
     const { data: appSettings } = await supabase.from('app_settings').select('*').limit(1).maybeSingle();
     if (appSettings) {
       const row = appSettings as AppSettingsRow;
       setApp(row);
-      if (row?.ms_forms_mapping && typeof row.ms_forms_mapping === 'object') {
+      if (row?.ms_forms_mapping && typeof row.ms_forms_mapping === 'object' && Object.keys(row.ms_forms_mapping).length > 0) {
         setImportMapping((prev) => ({ ...prev, ...(row.ms_forms_mapping || {}) }));
       }
     }
@@ -97,58 +85,36 @@ export default function FrontDesk() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const checkIn = async () => {
-    const reqMissing = fields.filter(f => f.enabled && f.required && !form[f.field_key]?.trim());
-    if (reqMissing.length) {
-      toast({ title: 'Missing required field', description: reqMissing[0].field_label, variant: 'destructive' });
-      return;
-    }
-    const { visitor_name = '', company = '', host_name = '', purpose = '', phone = '', ...extras } = form;
-    if (!visitor_name.trim()) {
-      toast({ title: 'Visitor name required', variant: 'destructive' }); return;
+  // Today's check-in lookup by normalized name
+  const todayByName = useMemo(() => {
+    const map = new Map<string, VisitorRow>();
+    visitors.forEach(v => map.set(v.visitor_name.trim().toLowerCase(), v));
+    return map;
+  }, [visitors]);
+
+  // Quick check-in from a profile (imported via form)
+  const quickCheckIn = async (p: any) => {
+    if (!user) { toast({ title: 'Sign in required', variant: 'destructive' }); return; }
+    const existing = todayByName.get((p.full_name || '').trim().toLowerCase());
+    if (existing && !existing.check_out) {
+      toast({ title: `${p.full_name} is already checked in`, description: `Badge ${existing.badge_number}` });
+      setBadgeVisitor(existing); return;
     }
     const { data, error } = await supabase.from('visitors').insert({
-      visitor_name, company, host_name, purpose, phone,
-      extra_fields: extras, checked_in_by: user?.id, source: 'frontdesk',
+      visitor_name: p.full_name, company: p.company || '', phone: p.phone || '',
+      extra_fields: p.extra_fields || {}, checked_in_by: user.id, source: 'frontdesk',
+      visitor_profile_id: p.id,
     }).select().single();
     if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
-    toast({ title: 'Visitor checked in!' });
-    setForm({}); setDialogOpen(false); setBadgeVisitor(data);
-    syncToSheet(data);
-  };
-
-  const syncToSheet = async (visitor: VisitorRow) => {
-    if (!settings?.google_sheet_url) return;
-    try {
-      await fetch(settings.google_sheet_url, {
-        method: 'POST', mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          badge_number: visitor.badge_number,
-          visitor_name: visitor.visitor_name, company: visitor.company,
-          host_name: visitor.host_name, purpose: visitor.purpose,
-          phone: visitor.phone, check_in: visitor.check_in,
-        }),
-      });
-    } catch {
-      // optional webhook sync
-    }
+    toast({ title: 'Checked in', description: `${p.full_name} · ${data.badge_number}` });
+    setBadgeVisitor(data);
+    setProfileSearch('');
   };
 
   const checkOut = async (id: string) => {
     const { error } = await supabase.from('visitors').update({ check_out: new Date().toISOString() }).eq('id', id);
     if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
     else toast({ title: 'Visitor checked out' });
-  };
-
-  const reuseProfile = (p: any) => {
-    setForm({
-      visitor_name: p.full_name || '',
-      company: p.company || '',
-      phone: p.phone || '',
-      ...(p.extra_fields || {}),
-    });
-    setDialogOpen(true);
   };
 
   const openHistory = async (p: any) => {
@@ -171,44 +137,29 @@ export default function FrontDesk() {
     a.click();
   };
 
-  const addField = async () => {
-    if (!newField.field_key.trim() || !newField.field_label.trim()) {
-      toast({ title: 'Key and label required', variant: 'destructive' }); return;
+  const saveSettings = async (sheetCsv: string, pin: string, webhook: string) => {
+    if (settings) {
+      await supabase.from('kiosk_settings').update({
+        google_sheet_url: sheetCsv, exit_pin: pin, updated_by: user?.id,
+      }).eq('id', settings.id);
     }
-    const { error } = await supabase.from('visitor_form_fields').insert({
-      ...newField, display_order: fields.length + 1,
-    });
-    if (error) toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    else { setNewField({ field_key: '', field_label: '', field_type: 'text', required: false }); loadAll(); }
-  };
-  const toggleField = async (id: string, key: 'required' | 'enabled', val: boolean) => {
-    const update = key === 'required' ? { required: val } : { enabled: val };
-    await supabase.from('visitor_form_fields').update(update).eq('id', id);
-    loadAll();
-  };
-  const deleteField = async (id: string) => {
-    await supabase.from('visitor_form_fields').delete().eq('id', id);
-    loadAll();
-  };
-  const saveSettings = async (sheet: string, pin: string) => {
-    if (settings) await supabase.from('kiosk_settings').update({ google_sheet_url: sheet, exit_pin: pin, updated_by: user?.id }).eq('id', settings.id);
+    if (app?.id) {
+      await supabase.from('app_settings').update({ ms_form_url: webhook } as never).eq('id', app.id);
+    }
     toast({ title: 'Saved' }); setSettingsOpen(false); loadAll();
   };
 
+  // CSV parsing
   const parseCsv = (csv: string): { headers: string[]; rows: Record<string, string>[] } => {
     const lines = csv.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter((l) => l.trim().length > 0);
     if (lines.length === 0) return { headers: [], rows: [] };
-
     const parseLine = (line: string) => {
-      const out: string[] = [];
-      let cur = '';
-      let inQuotes = false;
+      const out: string[] = []; let cur = ''; let inQuotes = false;
       for (let i = 0; i < line.length; i++) {
         const ch = line[i];
         if (ch === '"') {
           if (inQuotes && line[i + 1] === '"') { cur += '"'; i++; continue; }
-          inQuotes = !inQuotes;
-          continue;
+          inQuotes = !inQuotes; continue;
         }
         if (ch === ',' && !inQuotes) { out.push(cur); cur = ''; continue; }
         cur += ch;
@@ -216,7 +167,6 @@ export default function FrontDesk() {
       out.push(cur);
       return out.map((s) => s.trim());
     };
-
     const headers = parseLine(lines[0]);
     const rows = lines.slice(1).map((l) => {
       const cells = parseLine(l);
@@ -228,14 +178,14 @@ export default function FrontDesk() {
   };
 
   const inferMapping = (headers: string[]) => {
-    const pick = (candidates: string[]) => headers.find((h) => candidates.some((c) => h.toLowerCase() === c.toLowerCase())) || '';
+    const pick = (cands: string[]) => headers.find((h) => cands.some((c) => h.toLowerCase() === c.toLowerCase())) || '';
     setImportMapping((m) => ({
       ...m,
-      check_in: m.check_in || pick(['Completion time', 'Submit time', 'Timestamp', 'Date']),
+      check_in: m.check_in || pick(['Timestamp', 'Completion time', 'Submit time', 'Date']),
       visitor_name: m.visitor_name || pick(['Name', 'Full Name', 'Visitor Name', 'visitor_name']),
       company: m.company || pick(['Company', 'Organization', 'Organisation']),
       host_name: m.host_name || pick(['Host', 'Host Name']),
-      purpose: m.purpose || pick(['Purpose', 'Reason for visit']),
+      purpose: m.purpose || pick(['Purpose', 'Reason', 'Reason for visit']),
       phone: m.phone || pick(['Phone', 'Phone Number', 'Mobile']),
     }));
   };
@@ -247,15 +197,9 @@ export default function FrontDesk() {
     if (parsed.headers.length) inferMapping(parsed.headers);
   };
 
-  const saveMappingToSettings = async (mapping: Record<string, string>) => {
-    if (role !== 'admin') return;
-    if (!app?.id) return;
-    await supabase.from('app_settings').update({ ms_forms_mapping: mapping, updated_by: user?.id } as never).eq('id', app.id);
-  };
-
-  const importFromMsFormsCsv = async () => {
+  const runImport = async (rowsParsed?: { headers: string[]; rows: Record<string, string>[] }) => {
     if (!user) return;
-    const { headers, rows } = parseCsv(importText);
+    const { headers, rows } = rowsParsed || parseCsv(importText);
     if (headers.length === 0 || rows.length === 0) {
       toast({ title: 'No rows to import', variant: 'destructive' });
       return;
@@ -264,47 +208,76 @@ export default function FrontDesk() {
       toast({ title: 'Map a Visitor Name column first', variant: 'destructive' });
       return;
     }
+    if (role === 'admin' && app?.id) {
+      await supabase.from('app_settings').update({ ms_forms_mapping: importMapping, updated_by: user?.id } as never).eq('id', app.id);
+    }
 
-    await saveMappingToSettings(importMapping);
-
-    const inserts = rows.map((r) => {
+    // Build profile inserts (deduped by name+phone) + visitor inserts
+    const profileMap = new Map<string, any>();
+    const visitorInserts: any[] = [];
+    rows.forEach((r) => {
       const name = (r[importMapping.visitor_name] || '').trim();
-      if (!name) return null;
+      if (!name) return;
+      const phone = importMapping.phone ? (r[importMapping.phone] || '').trim() : '';
+      const company = importMapping.company ? (r[importMapping.company] || '').trim() : '';
+      const key = `${name.toLowerCase()}|${phone.replace(/\D/g, '')}`;
+      profileMap.set(key, { full_name: name, phone, company, extra_fields: r });
       const checkInRaw = importMapping.check_in ? (r[importMapping.check_in] || '').trim() : '';
-      const checkIn = checkInRaw ? new Date(checkInRaw) : new Date();
-      const checkInIso = isNaN(checkIn.getTime()) ? new Date().toISOString() : checkIn.toISOString();
-      return {
-        visitor_name: name,
-        company: importMapping.company ? (r[importMapping.company] || '').trim() : '',
+      const ci = checkInRaw ? new Date(checkInRaw) : new Date();
+      const ciIso = isNaN(ci.getTime()) ? new Date().toISOString() : ci.toISOString();
+      visitorInserts.push({
+        visitor_name: name, company,
         host_name: importMapping.host_name ? (r[importMapping.host_name] || '').trim() : '',
         purpose: importMapping.purpose ? (r[importMapping.purpose] || '').trim() : '',
-        phone: importMapping.phone ? (r[importMapping.phone] || '').trim() : '',
-        check_in: checkInIso,
-        checked_in_by: user.id,
-        source: 'msforms',
-        extra_fields: r,
-      };
-    }).filter(Boolean) as Database['public']['Tables']['visitors']['Insert'][];
+        phone, check_in: ciIso, checked_in_by: user.id, source: 'gform', extra_fields: r,
+      });
+    });
 
-    if (inserts.length === 0) {
-      toast({ title: 'No valid rows found (missing names)', variant: 'destructive' });
-      return;
+    // Upsert profiles
+    const profileArr = Array.from(profileMap.values());
+    if (profileArr.length) {
+      await supabase.from('visitor_profiles').upsert(profileArr as any, { onConflict: 'normalized_name,normalized_phone' as any, ignoreDuplicates: true });
     }
-
-    const { error } = await supabase.from('visitors').insert(inserts);
+    if (visitorInserts.length === 0) {
+      toast({ title: 'No valid rows (missing names)', variant: 'destructive' }); return;
+    }
+    const { error } = await supabase.from('visitors').insert(visitorInserts);
     if (error) {
-      toast({ title: 'Import failed', description: error.message, variant: 'destructive' });
-      return;
+      toast({ title: 'Import failed', description: error.message, variant: 'destructive' }); return;
     }
-    toast({ title: 'Imported', description: `${inserts.length} visitor(s) added` });
-    setImportOpen(false);
-    setImportText('');
-    setImportHeaders([]);
+    toast({ title: 'Imported', description: `${visitorInserts.length} visitor(s) added` });
+    setImportOpen(false); setImportText(''); setImportHeaders([]);
     loadAll();
   };
 
+  const syncFromSheet = async () => {
+    if (!settings?.google_sheet_url) {
+      toast({ title: 'Set Google Sheet CSV URL in Kiosk Settings first', variant: 'destructive' });
+      return;
+    }
+    setSyncing(true);
+    try {
+      const res = await fetch(settings.google_sheet_url, { method: 'GET' });
+      const text = await res.text();
+      const parsed = parseCsv(text);
+      setImportHeaders(parsed.headers);
+      if (parsed.headers.length) inferMapping(parsed.headers);
+      // Need mapping — open dialog if not previously saved
+      if (!importMapping.visitor_name) {
+        setImportText(text);
+        setImportOpen(true);
+        toast({ title: 'Map columns and click Import' });
+      } else {
+        await runImport(parsed);
+      }
+    } catch (e: any) {
+      toast({ title: 'Sync failed', description: e.message || 'Could not fetch sheet (check sharing settings — must be "Publish to web" CSV)', variant: 'destructive' });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const activeCount = visitors.filter(v => !v.check_out).length;
-  const enabledFields = fields.filter(f => f.enabled);
   const pagination = useTablePagination(visitors, rowsPerPageDefault);
 
   useEffect(() => {
@@ -315,52 +288,91 @@ export default function FrontDesk() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Search results (profiles imported from form responses)
+  const searchResults = useMemo(() => {
+    const q = profileSearch.trim().toLowerCase();
+    if (!q) return [];
+    return profiles.filter(p =>
+      [p.full_name, p.phone, p.company].some((x: string) => x?.toLowerCase().includes(q))
+    ).slice(0, 12);
+  }, [profileSearch, profiles]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Front Desk</h1>
-          <p className="text-muted-foreground mt-1">Visitor check-in, badges, and live presence</p>
+          <p className="text-muted-foreground mt-1">Visitors sign in via the form, then check in by name here</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={exportCSV}><Download className="h-4 w-4 mr-2" />Export CSV</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={syncFromSheet} disabled={syncing}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />Sync from Sheet
+          </Button>
+          <Button variant="outline" onClick={() => setImportOpen(true)}><Upload className="h-4 w-4 mr-2" />Paste CSV</Button>
+          <Button variant="outline" onClick={exportCSV}><Download className="h-4 w-4 mr-2" />Export</Button>
           {app?.ms_form_url && (
             <>
               <Button variant="outline" onClick={() => window.open(app.ms_form_url, '_blank')}><ExternalLink className="h-4 w-4 mr-2" />Open Form</Button>
               <Button variant="outline" onClick={() => setFormLinkOpen(true)}><QrCode className="h-4 w-4 mr-2" />Form QR</Button>
             </>
           )}
-          <Button variant="outline" onClick={() => setImportOpen(true)}><Upload className="h-4 w-4 mr-2" />Import Form CSV</Button>
           {canFrontDeskAdminTools && (
             <>
               <Button variant="outline" asChild><Link to="/visitor-kiosk"><Monitor className="h-4 w-4 mr-2" />Open Kiosk</Link></Button>
-              <Button variant="outline" onClick={() => setFieldsOpen(true)}><Settings className="h-4 w-4 mr-2" />Form Fields</Button>
-              <Button variant="outline" onClick={() => setSettingsOpen(true)}>Kiosk Settings</Button>
+              <Button variant="outline" onClick={() => setSettingsOpen(true)}><Settings className="h-4 w-4 mr-2" />Settings</Button>
             </>
           )}
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button><UserPlus className="h-4 w-4 mr-2" />Check In Visitor</Button>
-            </DialogTrigger>
-            <DialogContent className="max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>Check In Visitor</DialogTitle></DialogHeader>
-              <div className="space-y-3 mt-2">
-                {enabledFields.map(f => (
-                  <div key={f.id} className="space-y-1">
-                    <Label>{f.field_label}{f.required && ' *'}</Label>
-                    <Input
-                      type={f.field_type}
-                      value={form[f.field_key] || ''}
-                      onChange={(e) => setForm({ ...form, [f.field_key]: e.target.value })}
-                    />
-                  </div>
-                ))}
-                <Button onClick={checkIn} className="w-full">Check In & Print Badge</Button>
-              </div>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
+
+      {/* Quick Check-In by Name */}
+      <Card className="border-primary/30">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base"><UserCheck className="h-4 w-4" />Check In By Name</CardTitle>
+          <CardDescription>Type a visitor's name to check them in. Names come from the imported Google Form responses.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input
+              autoFocus className="pl-9 h-11 text-base"
+              placeholder="Start typing visitor's name..."
+              value={profileSearch} onChange={(e) => setProfileSearch(e.target.value)}
+            />
+          </div>
+          {profileSearch.trim() && (
+            <div className="space-y-1 max-h-72 overflow-auto">
+              {searchResults.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-3 text-center">
+                  No match. Ask the visitor to sign in via the Google Form, then click <strong>Sync from Sheet</strong>.
+                </p>
+              ) : searchResults.map((p) => {
+                const today = todayByName.get((p.full_name || '').trim().toLowerCase());
+                const inBuilding = today && !today.check_out;
+                return (
+                  <div key={p.id} className="flex items-center justify-between gap-2 p-3 rounded border hover:bg-muted/40">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium truncate">{p.full_name}</p>
+                        {inBuilding && <Badge>In Building</Badge>}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {[p.company, p.phone, p.badge_number].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={() => openHistory(p)} title="Visit history"><History className="h-4 w-4" /></Button>
+                    {inBuilding ? (
+                      <Button size="sm" variant="outline" onClick={() => checkOut(today!.id)}><LogOut className="h-3 w-3 mr-1" />Check Out</Button>
+                    ) : (
+                      <Button size="sm" onClick={() => quickCheckIn(p)}><UserCheck className="h-3 w-3 mr-1" />Check In</Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">In Building Now</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{activeCount}</p></CardContent></Card>
@@ -369,53 +381,25 @@ export default function FrontDesk() {
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Last 7 Days</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">{recentVisitors.length}</p></CardContent></Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="h-4 w-4" />Visitors — Last 7 Days</CardTitle></CardHeader>
-          <CardContent style={{ height: 220 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={Array.from({ length: 7 }).map((_, i) => {
-                const d = startOfDay(subDays(new Date(), 6 - i));
-                const next = startOfDay(subDays(new Date(), 5 - i));
-                const count = recentVisitors.filter(v => new Date(v.check_in) >= d && new Date(v.check_in) < next).length;
-                return { day: format(d, 'EEE'), count };
-              })}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="day" className="text-xs" />
-                <YAxis allowDecimals={false} className="text-xs" />
-                <RTooltip />
-                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-base flex items-center gap-2"><Search className="h-4 w-4" />Returning Visitors</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
-            <Input placeholder="Search by name, phone, company..." value={profileSearch} onChange={(e) => setProfileSearch(e.target.value)} />
-            <div className="max-h-52 overflow-auto space-y-1">
-              {profiles.filter(p => {
-                if (!profileSearch.trim()) return false;
-                const q = profileSearch.toLowerCase();
-                return [p.full_name, p.phone, p.company].some((x: string) => x?.toLowerCase().includes(q));
-              }).slice(0, 10).map(p => (
-                <div key={p.id} className="flex items-center justify-between gap-2 p-2 rounded border text-sm">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">{p.full_name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{p.company || p.phone || p.badge_number}</p>
-                  </div>
-                  <Button size="sm" variant="ghost" onClick={() => openHistory(p)}><History className="h-3 w-3" /></Button>
-                  <Button size="sm" onClick={() => reuseProfile(p)}>Check In</Button>
-                </div>
-              ))}
-              {profileSearch.trim() && profiles.filter(p => {
-                const q = profileSearch.toLowerCase();
-                return [p.full_name, p.phone, p.company].some((x: string) => x?.toLowerCase().includes(q));
-              }).length === 0 && <p className="text-xs text-muted-foreground py-2">No matches.</p>}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="h-4 w-4" />Visitors — Last 7 Days</CardTitle></CardHeader>
+        <CardContent style={{ height: 220 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={Array.from({ length: 7 }).map((_, i) => {
+              const d = startOfDay(subDays(new Date(), 6 - i));
+              const next = startOfDay(subDays(new Date(), 5 - i));
+              const count = recentVisitors.filter(v => new Date(v.check_in) >= d && new Date(v.check_in) < next).length;
+              return { day: format(d, 'EEE'), count };
+            })}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="day" className="text-xs" />
+              <YAxis allowDecimals={false} className="text-xs" />
+              <RTooltip />
+              <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -453,11 +437,9 @@ export default function FrontDesk() {
             </TableBody>
           </Table>
           <TablePaginationControls
-            page={pagination.page}
-            totalPages={pagination.totalPages}
+            page={pagination.page} totalPages={pagination.totalPages}
             rowsPerPage={pagination.rowsPerPage}
-            onPageChange={pagination.setPage}
-            onRowsPerPageChange={pagination.setRowsPerPage}
+            onPageChange={pagination.setPage} onRowsPerPageChange={pagination.setRowsPerPage}
           />
         </CardContent>
       </Card>
@@ -482,50 +464,47 @@ export default function FrontDesk() {
         </DialogContent>
       </Dialog>
 
-      {/* Microsoft Form QR */}
+      {/* Form QR */}
       <Dialog open={formLinkOpen} onOpenChange={setFormLinkOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Microsoft Form (Visitor Check-in)</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Visitor Sign-in Form</DialogTitle></DialogHeader>
           {app?.ms_form_url ? (
             <div className="space-y-3">
               <div className="flex items-center justify-center p-3 border rounded bg-white">
                 <QRCodeCanvas value={app.ms_form_url} size={220} />
               </div>
               <p className="text-xs text-muted-foreground break-all">{app.ms_form_url}</p>
-              <Button onClick={() => navigator.clipboard.writeText(app.ms_form_url)} variant="outline" className="w-full">Copy Link</Button>
+              <Button onClick={() => navigator.clipboard.writeText(app.ms_form_url || '')} variant="outline" className="w-full">Copy Link</Button>
               <Button onClick={() => window.open(app.ms_form_url, '_blank')} className="w-full">Open Form</Button>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Set the Microsoft Form URL in Master Settings first.</p>
+            <p className="text-sm text-muted-foreground">Set the Form URL in Settings first.</p>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Import MS Forms CSV */}
+      {/* Import / Sheet sync dialog */}
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Import Microsoft Forms CSV</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Import Form Responses (CSV)</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Paste CSV (exported from Microsoft Forms responses)</Label>
+              <Label>Paste CSV from Google Form / Microsoft Form responses</Label>
               <textarea
-                className="w-full min-h-[180px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="w-full min-h-[180px] rounded-md border border-input bg-background px-3 py-2 text-sm font-mono"
                 value={importText}
                 onChange={(e) => applyImportText(e.target.value)}
-                placeholder='Paste CSV here (first row must be headers)'
+                placeholder='Paste CSV here (first row must be headers). Or set a "Publish to web" CSV link in Settings and use Sync from Sheet.'
               />
-              <p className="text-xs text-muted-foreground">
-                Tip: open the CSV in Excel and copy all, then paste here.
-              </p>
             </div>
 
             {importHeaders.length > 0 && (
               <div className="space-y-2">
-                <Label>Column Mapping</Label>
+                <Label>Map Columns</Label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {(['check_in','visitor_name','company','host_name','purpose','phone'] as const).map((k) => (
                     <div key={k} className="space-y-1">
-                      <Label className="text-xs">{k === 'check_in' ? 'Check-in Time' : k.replace('_', ' ')}</Label>
+                      <Label className="text-xs">{k === 'check_in' ? 'Timestamp' : k.replace('_', ' ')}</Label>
                       <select
                         className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
                         value={importMapping[k] || ''}
@@ -537,52 +516,23 @@ export default function FrontDesk() {
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Only <span className="font-medium">visitor_name</span> is required; all others are optional.
-                </p>
+                <p className="text-xs text-muted-foreground">Only <span className="font-medium">visitor name</span> is required.</p>
               </div>
             )}
 
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => { setImportText(''); setImportHeaders([]); }} className="flex-1">Clear</Button>
-              <Button onClick={importFromMsFormsCsv} className="flex-1">Import</Button>
+              <Button onClick={() => runImport()} className="flex-1">Import</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Form Fields Editor */}
-      <Dialog open={fieldsOpen} onOpenChange={setFieldsOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Visitor Form Fields</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            {fields.map(f => (
-              <div key={f.id} className="flex items-center gap-2 p-2 border rounded">
-                <span className="font-mono text-xs w-24 shrink-0">{f.field_key}</span>
-                <span className="flex-1">{f.field_label}</span>
-                <div className="flex items-center gap-2 text-xs"><span>Required</span><Switch checked={f.required} onCheckedChange={(v) => toggleField(f.id, 'required', v)} /></div>
-                <div className="flex items-center gap-2 text-xs"><span>Enabled</span><Switch checked={f.enabled} onCheckedChange={(v) => toggleField(f.id, 'enabled', v)} /></div>
-                <Button size="sm" variant="ghost" onClick={() => deleteField(f.id)}><Trash2 className="h-3 w-3" /></Button>
-              </div>
-            ))}
-            <div className="border-t pt-3 space-y-2">
-              <Label>Add New Field</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <Input placeholder="field_key (lowercase)" value={newField.field_key} onChange={(e) => setNewField({ ...newField, field_key: e.target.value.toLowerCase().replace(/\s/g, '_') })} />
-                <Input placeholder="Display Label" value={newField.field_label} onChange={(e) => setNewField({ ...newField, field_label: e.target.value })} />
-              </div>
-              <div className="flex items-center gap-2"><Switch checked={newField.required} onCheckedChange={(v) => setNewField({ ...newField, required: v })} /><span className="text-sm">Required</span></div>
-              <Button onClick={addField} size="sm"><Plus className="h-3 w-3 mr-1" />Add Field</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Kiosk Settings */}
+      {/* Settings */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Kiosk Settings</DialogTitle></DialogHeader>
-          <KioskSettingsForm settings={settings} onSave={saveSettings} />
+          <DialogHeader><DialogTitle>Front Desk Settings</DialogTitle></DialogHeader>
+          <SettingsForm settings={settings} formUrl={app?.ms_form_url || ''} onSave={saveSettings} />
         </DialogContent>
       </Dialog>
 
@@ -608,21 +558,31 @@ export default function FrontDesk() {
   );
 }
 
-function KioskSettingsForm({ settings, onSave }: { settings: KioskSettingsRow | null; onSave: (sheet: string, pin: string) => void }) {
+function SettingsForm({ settings, formUrl, onSave }: {
+  settings: KioskSettingsRow | null;
+  formUrl: string;
+  onSave: (sheetCsv: string, pin: string, formUrl: string) => void;
+}) {
   const [sheet, setSheet] = useState(settings?.google_sheet_url || '');
   const [pin, setPin] = useState(settings?.exit_pin || '1234');
+  const [form, setForm] = useState(formUrl);
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <Label>Google Sheets Webhook URL</Label>
-        <Input value={sheet} onChange={(e) => setSheet(e.target.value)} placeholder="https://script.google.com/.../exec" />
-        <p className="text-xs text-muted-foreground">Create an Apps Script Web App that accepts POST requests and appends to your sheet.</p>
+        <Label>Google Form URL (for visitors to sign in)</Label>
+        <Input value={form} onChange={(e) => setForm(e.target.value)} placeholder="https://forms.gle/..." />
+        <p className="text-xs text-muted-foreground">Shown as the QR code visitors scan.</p>
+      </div>
+      <div className="space-y-1">
+        <Label>Linked Google Sheet — Published CSV URL</Label>
+        <Input value={sheet} onChange={(e) => setSheet(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv" />
+        <p className="text-xs text-muted-foreground">In Sheets: File → Share → Publish to web → CSV.</p>
       </div>
       <div className="space-y-1">
         <Label>Kiosk Exit PIN</Label>
         <Input value={pin} onChange={(e) => setPin(e.target.value)} maxLength={6} />
       </div>
-      <Button onClick={() => onSave(sheet, pin)} className="w-full">Save</Button>
+      <Button onClick={() => onSave(sheet, pin, form)} className="w-full">Save</Button>
     </div>
   );
 }
