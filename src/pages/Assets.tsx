@@ -403,6 +403,12 @@ export default function Assets() {
                           ) : (
                             <Button size="sm" variant="outline" onClick={() => returnAsset(a)}>Return</Button>
                           )}
+                          <Button size="sm" variant="ghost" asChild title="Open device kiosk page">
+                            <a href={deviceUrl(a.asset_tag)} target="_blank" rel="noreferrer"><ExternalLink className="h-3 w-3" /></a>
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => copyDeviceLink(a.asset_tag)} title="Copy device URL">
+                            <Copy className="h-3 w-3" />
+                          </Button>
                           {canAssetsAdmin && (
                             <>
                               <Button size="sm" variant="ghost" onClick={() => setEditAsset(a)}><Pencil className="h-3 w-3" /></Button>
