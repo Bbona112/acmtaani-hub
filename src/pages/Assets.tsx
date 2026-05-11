@@ -14,7 +14,9 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Plus, ArrowRightLeft, Trash2, Battery, BatteryCharging, Activity,
   Pencil, Download, Search, AlertTriangle, Wifi, WifiOff,
+  ExternalLink, Copy, QrCode,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { format, formatDistanceToNow, parseISO } from 'date-fns';
 import { Progress } from '@/components/ui/progress';
 import { TablePaginationControls } from '@/components/TablePaginationControls';
