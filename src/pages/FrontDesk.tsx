@@ -178,15 +178,30 @@ export default function FrontDesk() {
   };
 
   const inferMapping = (headers: string[]) => {
-    const pick = (cands: string[]) => headers.find((h) => cands.some((c) => h.toLowerCase() === c.toLowerCase())) || '';
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    // Exact match first, then substring on normalized headers
+    const pick = (cands: string[]) => {
+      const lower = headers.map((h) => norm(h));
+      for (const c of cands) {
+        const cn = norm(c);
+        const idx = lower.findIndex((h) => h === cn);
+        if (idx >= 0) return headers[idx];
+      }
+      for (const c of cands) {
+        const cn = norm(c);
+        const idx = lower.findIndex((h) => h.includes(cn));
+        if (idx >= 0) return headers[idx];
+      }
+      return '';
+    };
     setImportMapping((m) => ({
       ...m,
       check_in: m.check_in || pick(['Timestamp', 'Completion time', 'Submit time', 'Date']),
-      visitor_name: m.visitor_name || pick(['Name', 'Full Name', 'Visitor Name', 'visitor_name']),
-      company: m.company || pick(['Company', 'Organization', 'Organisation']),
-      host_name: m.host_name || pick(['Host', 'Host Name']),
-      purpose: m.purpose || pick(['Purpose', 'Reason', 'Reason for visit']),
-      phone: m.phone || pick(['Phone', 'Phone Number', 'Mobile']),
+      visitor_name: m.visitor_name || pick(['Full Names', 'Full Name', 'Visitor Name', 'Name']),
+      company: m.company || pick(['Company', 'Organization', 'Organisation', 'Affiliation']),
+      host_name: m.host_name || pick(['Host Name', 'Host']),
+      purpose: m.purpose || pick(['Purpose Reason', 'Purpose/Reason', 'Purpose', 'Reason for visit', 'Reason']),
+      phone: m.phone || pick(['WhatsApp Contact', 'Preferably WhatsApp Contact', 'Prefferably WhatsApp Contact', 'WhatsApp', 'Phone Number', 'Phone', 'Mobile', 'Contact']),
     }));
   };
 
