@@ -26,6 +26,7 @@ import Manual from "./pages/Manual";
 import Analytics from "./pages/Analytics";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
+import Announcements from "./pages/Announcements";
 
 const queryClient = new QueryClient();
 
@@ -68,6 +69,7 @@ const App = () => (
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/manual" element={<ProtectedRoute><Manual /></ProtectedRoute>} />
             <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+            <Route path="/announcements" element={<ProtectedRoute><Announcements /></ProtectedRoute>} />
             <Route path="/kiosk" element={<Kiosk />} />
             <Route path="/visitor-kiosk" element={<VisitorKiosk />} />
             <Route path="/device/:tag" element={<DeviceKiosk />} />
